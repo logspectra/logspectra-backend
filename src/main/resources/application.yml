@@ -1,0 +1,104 @@
+spring:
+  application:
+    name: logspectra-backend
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/logspectra}
+    username: ${SPRING_DATASOURCE_USERNAME:postgres}
+    password: ${SPRING_DATASOURCE_PASSWORD:postgres}
+    hikari:
+      maximum-pool-size: ${SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE:20}
+      minimum-idle: ${SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE:5}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        jdbc:
+          time_zone: UTC
+  liquibase:
+    enabled: ${SPRING_LIQUIBASE_ENABLED:true}
+    change-log: classpath:db/changelog/db.changelog-master.yaml
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+      lettuce:
+        pool:
+          max-active: ${SPRING_DATA_REDIS_LETTUCE_POOL_MAX_ACTIVE:20}
+  kafka:
+    consumer:
+      bootstrap-servers: ${kafka.bootstrap-servers}
+    producer:
+      bootstrap-servers: ${kafka.bootstrap-servers}
+  jackson:
+    time-zone: UTC
+    deserialization:
+      adjust-dates-to-context-time-zone: false
+    serialization:
+      write-dates-as-timestamps: false
+
+server:
+  port: ${SERVER_PORT:8080}
+
+elasticsearch:
+  uris: ${ELASTICSEARCH_URIS:http://localhost:9200}
+  username: ${ELASTICSEARCH_USERNAME:elastic}
+  password: ${ELASTICSEARCH_PASSWORD:changeme}
+
+kafka:
+  bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+  consumer:
+    group-id: ${KAFKA_CONSUMER_GROUP_ID:logspectra}
+    max-poll-records: ${KAFKA_CONSUMER_MAX_POLL_RECORDS:500}
+    auto-offset-reset: ${KAFKA_CONSUMER_AUTO_OFFSET_RESET:latest}
+  topics:
+    service-logs: ${KAFKA_TOPIC_SERVICE_LOGS:service-logs}
+    error-alerts: ${KAFKA_TOPIC_ERROR_ALERTS:error-alerts}
+
+ai:
+  provider: ${AI_PROVIDER:ollama}
+  default-provider: ${AI_DEFAULT_PROVIDER:OLLAMA}
+  openai:
+    base-url: ${AI_OPENAI_BASE_URL:https://api.openai.com}
+    api-key: ${AI_OPENAI_API_KEY:${OPENAI_API_KEY:}}
+  claude:
+    base-url: ${AI_CLAUDE_BASE_URL:https://api.anthropic.com}
+    api-key: ${AI_CLAUDE_API_KEY:${CLAUDE_API_KEY:}}
+    api-version: ${AI_CLAUDE_API_VERSION:2023-06-01}
+  ollama:
+    host: ${AI_OLLAMA_HOST:localhost}
+    port: ${AI_OLLAMA_PORT:11434}
+  rate-limit:
+    requests-per-minute: ${AI_RATE_LIMIT_REQUESTS_PER_MINUTE:20}
+    burst: ${AI_RATE_LIMIT_BURST:5}
+
+app:
+  cors:
+    allowed-origin-patterns: "*"
+
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics,prometheus
+  metrics:
+    export:
+      enabled: true
+
+logging:
+  level:
+    com.loganalyzer: INFO
+
+security:
+  jwt:
+    # base64-encoded 32-byte default key for local/dev; override via env in production
+    secret: ${JWT_SECRET_BASE64:U2VjdXJlTG9nU3BlY3RyYUp3dEtleUZvckRldk9ubHkhMTIzNDU2}
+    expiration-seconds: ${JWT_EXPIRATION_SECONDS:86400}

@@ -1,0 +1,11 @@
+databaseChangeLog:
+  - changeSet:
+      id: 001-ai-settings
+      author: logspectra
+      changes:
+        - sqlFile:
+            path: db/ai-settings-ddl.sql
+            relativeToChangelogFile: false
+            splitStatements: true
+            stripComments: false
+
