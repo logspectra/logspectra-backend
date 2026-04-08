@@ -2,6 +2,10 @@
 
 Spring Boot service for log ingestion, search, real-time streaming, AI-assisted analysis, and issue grouping.
 
+## License
+
+This project is licensed under the Apache License 2.0. See `LICENSE` for the full text.
+
 ## What This Service Does
 
 - Ingests service logs from Kafka and indexes them into Elasticsearch.

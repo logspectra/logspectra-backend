@@ -2,6 +2,10 @@
 
 Thank you for contributing. This guide helps keep changes reliable, secure, and easy to review.
 
+## License
+
+By contributing to this repository, you agree that your contributions will be licensed under the Apache License 2.0, matching the project `LICENSE` file.
+
 ## Contribution Workflow
 
 1. Create or confirm an issue first (bug, feature, refactor, or docs).
