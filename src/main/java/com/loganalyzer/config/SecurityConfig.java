@@ -62,7 +62,7 @@ public class SecurityConfig {
         corsConfiguration.setAllowedOriginPatterns(java.util.List.of("*"));
         corsConfiguration.setAllowedMethods(java.util.List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
         corsConfiguration.setAllowedHeaders(java.util.List.of("*"));
-        corsConfiguration.setAllowCredentials(true);
+        corsConfiguration.setAllowCredentials(false);
         corsConfiguration.setMaxAge(3600L);
         // Allow custom headers used for authorization
         corsConfiguration.addExposedHeader("Authorization");

@@ -1,6 +1,9 @@
 spring:
   application:
     name: logspectra-backend
+  mvc:
+    async:
+      request-timeout: -1
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/logspectra}
     username: ${SPRING_DATASOURCE_USERNAME:postgres}
@@ -40,7 +43,9 @@ spring:
       write-dates-as-timestamps: false
 
 server:
-  port: ${SERVER_PORT:8080}
+  port: ${SERVER_PORT:8081}
+  tomcat:
+    connection-timeout: 600000
 
 elasticsearch:
   uris: ${ELASTICSEARCH_URIS:http://localhost:9200}

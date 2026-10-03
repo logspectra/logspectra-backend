@@ -2,7 +2,6 @@ package com.loganalyzer.kafka.consumer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
@@ -10,7 +9,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.loganalyzer.elasticsearch.document.LogDocument;
 import com.loganalyzer.elasticsearch.repository.LogElasticsearchRepository;
 import com.loganalyzer.kafka.producer.AlertProducer;
-import com.loganalyzer.service.LogStreamingService;
+import com.loganalyzer.service.LiveLogStreamFanoutService;
 
 import java.io.IOException;
 import java.util.List;
@@ -21,7 +20,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
 
 @ExtendWith(MockitoExtension.class)
 class LogIngestionConsumerTest {
@@ -33,16 +31,13 @@ class LogIngestionConsumerTest {
     private AlertProducer alertProducer;
 
     @Mock
-    private LogStreamingService logStreamingService;
-
-    @Mock
-    private SimpMessagingTemplate simpMessagingTemplate;
+    private LiveLogStreamFanoutService liveLogStreamFanoutService;
 
     private LogIngestionConsumer consumer;
 
     @BeforeEach
     void setUp() {
-        consumer = new LogIngestionConsumer(new ObjectMapper(), repository, alertProducer, logStreamingService, simpMessagingTemplate);
+        consumer = new LogIngestionConsumer(new ObjectMapper(), repository, alertProducer, liveLogStreamFanoutService);
     }
 
     @Test
@@ -80,8 +75,7 @@ class LogIngestionConsumerTest {
         assertEquals("default", indexed.getFirst().getProjectId());
         assertEquals("INFO", indexed.getFirst().getLevel());
 
-        verify(simpMessagingTemplate).convertAndSend(eq("/topic/logs/default"), any(LogDocument.class));
-        verify(logStreamingService).publish(any(LogDocument.class));
+        verify(liveLogStreamFanoutService).fanout(any(LogDocument.class));
         verify(alertProducer, never()).sendAlert(any());
     }
 
@@ -92,9 +86,8 @@ class LogIngestionConsumerTest {
 
         consumer.consume(List.of(errorRecord));
 
-        verify(simpMessagingTemplate).convertAndSend(eq("/topic/alerts"), any(LogDocument.class));
+        verify(liveLogStreamFanoutService).fanout(any(LogDocument.class));
         verify(alertProducer).sendAlert(any(LogDocument.class));
         verify(repository).bulkIndex(any());
     }
 }
-

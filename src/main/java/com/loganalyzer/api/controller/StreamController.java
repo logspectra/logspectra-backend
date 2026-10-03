@@ -25,15 +25,15 @@ public class StreamController {
 
     @GetMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter stream(@RequestParam(required = false) String service,
-                             @RequestParam(required = false) String level,
-                             @RequestParam(value = "projectId", required = false) String projectIdParam,
-                             Principal principal,
-                             @RequestHeader(value = ProjectAccessService.USER_ID_HEADER, required = false) String userIdHeader,
-                             @RequestHeader(value = ProjectAccessService.PROJECT_ID_HEADER, required = false) String projectIdHeader) {
+                                            @RequestParam(required = false) String level,
+                                            @RequestParam(value = "projectId", required = false) String projectIdParam,
+                                            Principal principal,
+                                            @RequestHeader(value = ProjectAccessService.USER_ID_HEADER, required = false) String userIdHeader,
+                                            @RequestHeader(value = ProjectAccessService.PROJECT_ID_HEADER, required = false) String projectIdHeader) {
         UUID userId = projectAccessService.resolveUserId(principal, userIdHeader);
         UUID projectId = projectAccessService.resolveProjectId(userId, projectIdHeader, projectIdParam);
         projectAccessService.validateAccess(userId, projectId);
-        // Create SSE emitter with streaming service
+
         return logStreamingService.createEmitter(projectId.toString(), service, level);
     }
 }
