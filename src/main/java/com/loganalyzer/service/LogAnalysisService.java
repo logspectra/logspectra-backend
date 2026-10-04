@@ -17,11 +17,14 @@ import com.loganalyzer.domain.repository.AnalysisHistoryRepository;
 import com.loganalyzer.domain.repository.IssueGroupRepository;
 import com.loganalyzer.elasticsearch.document.LogDocument;
 import com.loganalyzer.elasticsearch.repository.LogElasticsearchRepository;
+import com.loganalyzer.github.RemediationPullRequestResult;
+import com.loganalyzer.github.RemediationPullRequestService;
 import com.loganalyzer.infrastructure.exception.ResourceNotFoundException;
 import java.io.IOException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import lombok.RequiredArgsConstructor;
@@ -42,6 +45,7 @@ public class LogAnalysisService {
     private final AISettingsService aiSettingsService;
     private final AnalysisHistoryRepository analysisHistoryRepository;
     private final IssueGroupRepository issueGroupRepository;
+    private final RemediationPullRequestService remediationPullRequestService;
 
     @Async("aiExecutor")
     public CompletableFuture<AnalysisResultResponse> analyze(AnalyzeRequest request,
@@ -64,7 +68,19 @@ public class LogAnalysisService {
         var history = logMapper.toHistory(result, execution.getProviderUsed().name(), estimateTokens(logs), System.currentTimeMillis() - started, estimateCost(logs));
         history.setProjectId(projectId);
         analysisHistoryRepository.save(history);
-        return CompletableFuture.completedFuture(logMapper.toResponse(result));
+
+        AnalysisResultResponse response = logMapper.toResponse(result);
+        boolean wantPr = Boolean.TRUE.equals(request.getCreateRemediationPr());
+        if (remediationPullRequestService.shouldCreate(wantPr)) {
+            Optional<RemediationPullRequestResult> pr =
+                remediationPullRequestService.createForAnalysis(projectId, service, result);
+            pr.ifPresent(created -> {
+                response.setRemediationPrUrl(created.getPullRequestUrl());
+                response.setRemediationBranch(created.getBranch());
+                response.setRemediationPrNumber(created.getPullRequestNumber());
+            });
+        }
+        return CompletableFuture.completedFuture(response);
     }
 
     private AIAnalysisRequest resolveAIRequest(AnalyzeRequest request) {

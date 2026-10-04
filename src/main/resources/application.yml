@@ -123,3 +123,24 @@ security:
     # base64-encoded 32-byte default key for local/dev; override via env in production
     secret: ${JWT_SECRET_BASE64:U2VjdXJlTG9nU3BlY3RyYUp3dEtleUZvckRldk9ubHkhMTIzNDU2}
     expiration-seconds: ${JWT_EXPIRATION_SECONDS:86400}
+
+# GitHub App → open remediation PRs in registered *service* repos (gateway, payment, …).
+# Setup: see SETUP-GITHUB-APP.md. No MCP required for runtime.
+github:
+  app:
+    enabled: ${GITHUB_APP_ENABLED:false}
+    app-id: ${GITHUB_APP_ID:}
+    installation-id: ${GITHUB_APP_INSTALLATION_ID:}
+    # Prefer file path locally; in K8s use a secret mounted as PEM or GITHUB_APP_PRIVATE_KEY
+    private-key-path: ${GITHUB_APP_PRIVATE_KEY_PATH:}
+    private-key: ${GITHUB_APP_PRIVATE_KEY:}
+    api-base-url: ${GITHUB_API_BASE_URL:https://api.github.com}
+  pr:
+    enabled: ${GITHUB_PR_ENABLED:true}
+    # When true, every successful analysis that has a registered gitUrl opens a PR
+    auto-create-after-analysis: ${GITHUB_PR_AUTO_CREATE:false}
+    branch-prefix: logspectra/fix
+    commit-author-name: LogSpectra
+    commit-author-email: logspectra@users.noreply.github.com
+    # Comma-separated GitHub usernames to request review from
+    reviewers: ${GITHUB_PR_REVIEWERS:}

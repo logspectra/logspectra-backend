@@ -26,6 +26,11 @@ public class AnalyzeRequest {
     private String provider;
     private String apiKey;
     private Map<String, Object> providerSettings;
+    /**
+     * When true (and GitHub App is configured), open a remediation PR in the
+     * service's registered GitHub repo after analysis completes.
+     */
+    private Boolean createRemediationPr;
 
     @AssertTrue(message = "traceId, logIds, or query with from/to must be provided")
     public boolean isValidScope() {
