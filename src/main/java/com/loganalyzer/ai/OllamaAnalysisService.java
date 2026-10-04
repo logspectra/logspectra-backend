@@ -8,6 +8,7 @@ import com.loganalyzer.ai.prompt.PromptBuilder;
 import com.loganalyzer.infrastructure.exception.AIAnalysisException;
 import com.loganalyzer.infrastructure.ratelimit.AIRateLimiter;
 import com.loganalyzer.service.CacheService;
+import com.logspectra.ai.LogSpectraAiFacade;
 import java.time.Duration;
 import java.util.Map;
 import org.springframework.http.MediaType;
@@ -27,8 +28,11 @@ public class OllamaAnalysisService extends AbstractChunkedAIAnalysisProvider {
                                  StackTraceNormalizer stackTraceNormalizer,
                                  CacheService cacheService,
                                  AIRateLimiter rateLimiter,
-                                 AnalysisResultParser responseParser) {
-        super(promptBuilder, chunker, summarizer, stackTraceNormalizer, cacheService, rateLimiter, responseParser);
+                                 AnalysisResultParser responseParser,
+                                 LogSpectraAiFacade logSpectraAiFacade,
+                                 AiLogEventMapper aiLogEventMapper) {
+        super(promptBuilder, chunker, summarizer, stackTraceNormalizer, cacheService, rateLimiter, responseParser,
+            logSpectraAiFacade, aiLogEventMapper);
     }
 
     @Override

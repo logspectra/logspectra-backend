@@ -9,6 +9,7 @@ import com.loganalyzer.ai.prompt.PromptBuilder;
 import com.loganalyzer.infrastructure.exception.AIAnalysisException;
 import com.loganalyzer.infrastructure.ratelimit.AIRateLimiter;
 import com.loganalyzer.service.CacheService;
+import com.logspectra.ai.LogSpectraAiFacade;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -40,8 +41,11 @@ public class OpenAIAnalysisService extends AbstractChunkedAIAnalysisProvider {
                                  StackTraceNormalizer stackTraceNormalizer,
                                  CacheService cacheService,
                                  AIRateLimiter rateLimiter,
-                                 AnalysisResultParser responseParser) {
-        super(promptBuilder, chunker, summarizer, stackTraceNormalizer, cacheService, rateLimiter, responseParser);
+                                 AnalysisResultParser responseParser,
+                                 LogSpectraAiFacade logSpectraAiFacade,
+                                 AiLogEventMapper aiLogEventMapper) {
+        super(promptBuilder, chunker, summarizer, stackTraceNormalizer, cacheService, rateLimiter, responseParser,
+            logSpectraAiFacade, aiLogEventMapper);
         this.promptBuilder = promptBuilder;
     }
 

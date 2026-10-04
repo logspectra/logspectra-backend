@@ -48,7 +48,12 @@ public class SecurityConfig {
             .authenticationProvider(daoAuthenticationProvider)
             .authorizeHttpRequests(auth -> auth
                     .dispatcherTypeMatchers(DispatcherType.ASYNC).permitAll()
-                .requestMatchers("/api/v1/auth/login", "/actuator/health", "/api-docs").permitAll()
+                .requestMatchers(
+                    "/api/v1/auth/login",
+                    "/actuator/health",
+                    "/api-docs",
+                    "/api/v1/services/code-registry"
+                ).permitAll()
                 .anyRequest().authenticated()
             )
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

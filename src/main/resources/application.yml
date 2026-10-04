@@ -79,6 +79,22 @@ ai:
     requests-per-minute: ${AI_RATE_LIMIT_REQUESTS_PER_MINUTE:20}
     burst: ${AI_RATE_LIMIT_BURST:5}
 
+# Code-aware analysis (logspectra-ai).
+# Preferred: client services register git-url via starter → Redis.
+# YAML below is only a fallback for local-path on the backend host.
+logspectra:
+  ai:
+    enabled: true
+    registry:
+      # Optional shared secret; clients send X-LogSpectra-Registry-Token
+      token: ${LOGSPECTRA_REGISTRY_TOKEN:}
+    code-context:
+      enabled: true
+      provider: local
+      max-snippets: 8
+      context-lines: 20
+      services: {}
+
 app:
   cors:
     allowed-origin-patterns: "*"
