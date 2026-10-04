@@ -1,7 +1,6 @@
 package com.loganalyzer.kafka.consumer;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.loganalyzer.elasticsearch.document.LogDocument;
 import com.loganalyzer.elasticsearch.repository.LogElasticsearchRepository;
 import com.loganalyzer.kafka.producer.AlertProducer;
@@ -21,7 +20,7 @@ import org.springframework.util.StringUtils;
 @Slf4j
 public class LogIngestionConsumer {
 
-    private final ObjectMapper objectMapper;
+    private final KafkaLogDocumentMapper kafkaLogDocumentMapper;
     private final LogElasticsearchRepository repository;
     private final AlertProducer alertProducer;
     private final LiveLogStreamFanoutService liveLogStreamFanoutService;
@@ -42,7 +41,7 @@ public class LogIngestionConsumer {
             }
 
             try {
-                LogDocument logDocument = objectMapper.readValue(payload, LogDocument.class);
+                LogDocument logDocument = kafkaLogDocumentMapper.fromKafkaPayload(payload);
                 if (logDocument.getTimestamp() == null) {
                     logDocument.setTimestamp(java.time.Instant.now());
                 }

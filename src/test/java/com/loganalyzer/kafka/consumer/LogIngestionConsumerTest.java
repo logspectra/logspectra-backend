@@ -6,6 +6,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.loganalyzer.elasticsearch.document.LogDocument;
 import com.loganalyzer.elasticsearch.repository.LogElasticsearchRepository;
 import com.loganalyzer.kafka.producer.AlertProducer;
@@ -37,7 +38,14 @@ class LogIngestionConsumerTest {
 
     @BeforeEach
     void setUp() {
-        consumer = new LogIngestionConsumer(new ObjectMapper(), repository, alertProducer, liveLogStreamFanoutService);
+        ObjectMapper objectMapper = new ObjectMapper();
+        objectMapper.registerModule(new JavaTimeModule());
+        consumer = new LogIngestionConsumer(
+            new KafkaLogDocumentMapper(objectMapper),
+            repository,
+            alertProducer,
+            liveLogStreamFanoutService
+        );
     }
 
     @Test
