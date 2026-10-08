@@ -2,6 +2,7 @@ package com.loganalyzer.elasticsearch.query;
 
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import co.elastic.clients.elasticsearch._types.FieldValue;
+import co.elastic.clients.elasticsearch._types.aggregations.FieldDateMath;
 import co.elastic.clients.elasticsearch._types.SortOrder;
 import co.elastic.clients.elasticsearch._types.aggregations.CalendarInterval;
 import co.elastic.clients.elasticsearch._types.aggregations.StringTermsBucket;
@@ -13,6 +14,7 @@ import com.loganalyzer.api.dto.request.AggregationRequest;
 import com.loganalyzer.api.dto.request.LogSearchRequest;
 import com.loganalyzer.elasticsearch.document.LogDocument;
 import java.io.IOException;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Collections;
@@ -73,6 +75,13 @@ public class LogQueryBuilder {
     }
 
     public SearchResponse<Void> aggregateErrors(AggregationRequest request, String projectId) throws IOException {
+        Instant rangeFrom = request.getFrom();
+        Instant rangeTo = request.getTo();
+        String histogramInterval = errorHistogramInterval(rangeFrom, rangeTo);
+        String rangeFromIso = rangeFrom.toString();
+        String rangeToIso = rangeTo.toString();
+        FieldDateMath boundsMin = FieldDateMath.of(fdm -> fdm.expr(rangeFromIso));
+        FieldDateMath boundsMax = FieldDateMath.of(fdm -> fdm.expr(rangeToIso));
         return client.search(s -> s.index(INDEX_PATTERN)
             .size(0)
             .query(q -> q.bool(b -> b
@@ -80,14 +89,36 @@ public class LogQueryBuilder {
                 .filter(f -> f.term(t -> t.field("level.keyword").value("ERROR")))
                 .filter(f -> f.range(r -> r.date(d -> d
                     .field("timestamp")
-                    .gte(request.getFrom().toString())
-                    .lte(request.getTo().toString()))))))
+                    .gte(rangeFromIso)
+                    .lte(rangeToIso))))))
             .aggregations("by_service", a -> a
                 .terms(t -> t.field("service.keyword").size(20))
                 .aggregations("by_exception", aa -> aa
                     .terms(tt -> tt.field("exception.keyword").size(10))
-                    .aggregations("over_time", aaa -> aaa.dateHistogram(dh -> dh.field("timestamp").timeZone("+00:00").calendarInterval(CalendarInterval.Hour)))))
+                    .aggregations("over_time", aaa -> aaa.dateHistogram(dh -> dh
+                        .field("timestamp")
+                        .timeZone("+00:00")
+                        .fixedInterval(fi -> fi.time(histogramInterval))
+                        .minDocCount(0)
+                        .extendedBounds(eb -> eb.min(boundsMin).max(boundsMax))))))
             , Void.class);
+    }
+
+    static String errorHistogramInterval(Instant from, Instant to) {
+        long seconds = Math.max(1, Duration.between(from, to).getSeconds());
+        if (seconds <= 3600) {
+            return "1s";
+        }
+        if (seconds <= 3 * 3600) {
+            return "10s";
+        }
+        if (seconds <= 24 * 3600) {
+            return "1m";
+        }
+        if (seconds <= 4 * 24 * 3600) {
+            return "15m";
+        }
+        return "1h";
     }
 
     public List<LogDocument> fetchLogsForAnalysis(String traceId, String projectId) throws IOException {
