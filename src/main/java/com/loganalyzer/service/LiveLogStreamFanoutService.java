@@ -1,8 +1,10 @@
 package com.loganalyzer.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.loganalyzer.elasticsearch.document.LogDocument;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -15,6 +17,7 @@ public class LiveLogStreamFanoutService {
 
     public static final String REDIS_CHANNEL = "logspectra:live-logs";
 
+    private final String instanceId = UUID.randomUUID().toString();
     private final StringRedisTemplate stringRedisTemplate;
     private final ObjectMapper objectMapper;
     private final LogStreamingService logStreamingService;
@@ -23,11 +26,12 @@ public class LiveLogStreamFanoutService {
         if (logDocument == null) {
             return;
         }
+        deliverLocally(logDocument);
         try {
-            stringRedisTemplate.convertAndSend(REDIS_CHANNEL, objectMapper.writeValueAsString(logDocument));
+            FanoutEnvelope envelope = new FanoutEnvelope(instanceId, logDocument);
+            stringRedisTemplate.convertAndSend(REDIS_CHANNEL, objectMapper.writeValueAsString(envelope));
         } catch (Exception ex) {
-            log.warn("Redis live-log fanout failed; delivering to local SSE subscribers only", ex);
-            deliverLocally(logDocument);
+            log.warn("Redis live-log fanout failed; local SSE subscribers already notified", ex);
         }
     }
 
@@ -40,10 +44,22 @@ public class LiveLogStreamFanoutService {
 
     public void onRedisMessage(String payload) {
         try {
+            JsonNode root = objectMapper.readTree(payload);
+            if (root.has("publisherId") && root.has("log")) {
+                String publisherId = root.get("publisherId").asText();
+                if (instanceId.equals(publisherId)) {
+                    return;
+                }
+                LogDocument logDocument = objectMapper.treeToValue(root.get("log"), LogDocument.class);
+                deliverLocally(logDocument);
+                return;
+            }
             LogDocument logDocument = objectMapper.readValue(payload, LogDocument.class);
             deliverLocally(logDocument);
         } catch (JsonProcessingException ex) {
             log.warn("Ignoring malformed live-log Redis payload", ex);
         }
     }
+
+    private record FanoutEnvelope(String publisherId, LogDocument log) {}
 }
