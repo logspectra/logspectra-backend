@@ -53,7 +53,7 @@ public class LogAnalysisService {
                                                              AIStreamListener streamListener) {
         // Perform security validation within the async context
         long started = System.currentTimeMillis();
-        List<LogDocument> logs = resolveLogs(request, projectId);
+        List<LogDocument> logs = stampProjectId(resolveLogs(request, projectId), projectId);
         if (logs.isEmpty()) {
             throw new ResourceNotFoundException("No logs matched the analysis criteria");
         }
@@ -114,6 +114,20 @@ public class LogAnalysisService {
 
     private String valueAsString(Object value) {
         return value == null ? null : String.valueOf(value);
+    }
+
+    /** Ensures Redis code-registry / remote GitHub lookup can resolve the active project. */
+    private static List<LogDocument> stampProjectId(List<LogDocument> logs, UUID projectId) {
+        if (logs == null || projectId == null) {
+            return logs;
+        }
+        String id = projectId.toString();
+        for (LogDocument doc : logs) {
+            if (doc != null && !StringUtils.hasText(doc.getProjectId())) {
+                doc.setProjectId(id);
+            }
+        }
+        return logs;
     }
 
     private List<LogDocument> resolveLogs(AnalyzeRequest request, UUID projectId) {

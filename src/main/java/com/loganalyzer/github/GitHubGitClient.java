@@ -1,19 +1,24 @@
 package com.loganalyzer.github;
 
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientResponseException;
 
 /**
- * Git Data API helpers for creating a branch + file commit + PR without a local clone.
+ * GitHub REST helpers — Contents API for reads + Git Data API for branch/commit/PR.
+ * No local {@code git clone}; all operations are in-memory HTTPS.
  */
 @Service
 @RequiredArgsConstructor
@@ -22,6 +27,102 @@ public class GitHubGitClient {
 
     private final GitHubAppProperties properties;
     private final GitHubAppTokenService tokenService;
+
+    /**
+     * Read a file via Contents API into memory (base64 decode). Empty when path is missing.
+     */
+    public Optional<String> getFileContent(GitHubRepoRef repo, String path, String ref) {
+        if (!StringUtils.hasText(path)) {
+            return Optional.empty();
+        }
+        String normalized = path.startsWith("/") ? path.substring(1) : path;
+        long started = System.currentTimeMillis();
+        try {
+            Map<String, Object> response = client().get()
+                .uri(uriBuilder -> {
+                    uriBuilder.pathSegment("repos", repo.owner(), repo.repo(), "contents");
+                    for (String segment : normalized.split("/")) {
+                        if (StringUtils.hasText(segment)) {
+                            uriBuilder.pathSegment(segment);
+                        }
+                    }
+                    if (StringUtils.hasText(ref)) {
+                        uriBuilder.queryParam("ref", ref);
+                    }
+                    return uriBuilder.build();
+                })
+                .retrieve()
+                .body(new ParameterizedTypeReference<>() {});
+            if (response == null || response.get("content") == null) {
+                return Optional.empty();
+            }
+            String encoding = response.get("encoding") != null
+                ? String.valueOf(response.get("encoding")) : "base64";
+            String raw = String.valueOf(response.get("content")).replaceAll("\\s", "");
+            if (!"base64".equalsIgnoreCase(encoding)) {
+                return Optional.of(raw);
+            }
+            String decoded = new String(Base64.getDecoder().decode(raw), StandardCharsets.UTF_8);
+            log.debug("operation=githubGetFile feature=github-agent status=exit path={} durationMs={}",
+                normalized, System.currentTimeMillis() - started);
+            return Optional.of(decoded);
+        } catch (RestClientResponseException ex) {
+            if (ex.getStatusCode().value() == 404) {
+                log.debug("operation=githubGetFile feature=github-agent status=exit path={} notFound=true durationMs={}",
+                    normalized, System.currentTimeMillis() - started);
+                return Optional.empty();
+            }
+            log.error("operation=githubGetFile feature=github-agent status=error path={} error={} durationMs={}",
+                normalized, ex.getMessage(), System.currentTimeMillis() - started, ex);
+            throw ex;
+        } catch (RuntimeException ex) {
+            log.error("operation=githubGetFile feature=github-agent status=error path={} error={} durationMs={}",
+                normalized, ex.getMessage(), System.currentTimeMillis() - started, ex);
+            throw ex;
+        }
+    }
+
+    /**
+     * Recursive file paths (blobs only) for a branch tip — used by the iterative agent.
+     */
+    public List<String> listFilePaths(GitHubRepoRef repo, String branch, int maxEntries) {
+        long started = System.currentTimeMillis();
+        String commitSha = getDefaultBranchSha(repo, branch);
+        String treeSha = getCommitTreeSha(repo, commitSha);
+        Map<String, Object> tree = client().get()
+            .uri(uriBuilder -> uriBuilder
+                .path("/repos/{owner}/{repo}/git/trees/{sha}")
+                .queryParam("recursive", "1")
+                .build(repo.owner(), repo.repo(), treeSha))
+            .retrieve()
+            .body(new ParameterizedTypeReference<>() {});
+        if (tree == null) {
+            tree = Map.of();
+        }
+        Object raw = tree.get("tree");
+        if (!(raw instanceof List<?> entries)) {
+            return List.of();
+        }
+        int limit = Math.max(1, maxEntries);
+        List<String> paths = new ArrayList<>();
+        for (Object entry : entries) {
+            if (!(entry instanceof Map<?, ?> map)) {
+                continue;
+            }
+            Object type = map.get("type");
+            Object path = map.get("path");
+            if (!"blob".equals(type) || path == null) {
+                continue;
+            }
+            paths.add(String.valueOf(path));
+            if (paths.size() >= limit) {
+                break;
+            }
+        }
+        log.debug("operation=githubListTree feature=github-agent status=exit repo={} files={} truncated={} durationMs={}",
+            repo.fullName(), paths.size(), Boolean.TRUE.equals(tree.get("truncated")), System.currentTimeMillis() - started);
+        return paths;
+    }
 
     public String getDefaultBranchSha(GitHubRepoRef repo, String branch) {
         Map<String, Object> ref = get("/repos/{owner}/{repo}/git/ref/heads/{branch}", repo.owner(), repo.repo(), branch);
@@ -53,18 +154,28 @@ public class GitHubGitClient {
     }
 
     public String createTree(GitHubRepoRef repo, String baseTreeSha, String path, String blobSha) {
-        Map<String, Object> entry = new LinkedHashMap<>();
-        entry.put("path", path);
-        entry.put("mode", "100644");
-        entry.put("type", "blob");
-        entry.put("sha", blobSha);
+        return createTree(repo, baseTreeSha, List.of(new TreeEntry(path, blobSha)));
+    }
+
+    public String createTree(GitHubRepoRef repo, String baseTreeSha, List<TreeEntry> entries) {
+        List<Map<String, Object>> tree = new ArrayList<>();
+        for (TreeEntry entry : entries) {
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("path", entry.path());
+            row.put("mode", "100644");
+            row.put("type", "blob");
+            row.put("sha", entry.blobSha());
+            tree.add(row);
+        }
         Map<String, Object> body = Map.of(
             "base_tree", baseTreeSha,
-            "tree", List.of(entry)
+            "tree", tree
         );
         Map<String, Object> created = post("/repos/{owner}/{repo}/git/trees", body, repo.owner(), repo.repo());
         return String.valueOf(created.get("sha"));
     }
+
+    public record TreeEntry(String path, String blobSha) {}
 
     public String createCommit(GitHubRepoRef repo, String message, String treeSha, String parentSha,
                                String authorName, String authorEmail) {

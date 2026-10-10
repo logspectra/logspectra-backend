@@ -7,7 +7,9 @@ import com.logspectra.ai.model.ServiceSourceMapping;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -38,8 +40,8 @@ public class RemediationPullRequestService {
     }
 
     /**
-     * Opens a remediation PR in the service's registered GitHub repo.
-     * Commits a markdown brief under {@code .logspectra/remediations/} — does not rewrite application source yet.
+     * Opens a remediation PR: commits AI source patches (when present) plus a markdown brief.
+     * Uses GitHub REST only — no local clone.
      */
     public Optional<RemediationPullRequestResult> createForAnalysis(
         UUID projectId,
@@ -85,11 +87,23 @@ public class RemediationPullRequestService {
         try {
             String baseSha = gitHubGitClient.getDefaultBranchSha(repo, baseBranch);
             String baseTree = gitHubGitClient.getCommitTreeSha(repo, baseSha);
-            String markdown = buildRemediationMarkdown(projectId, serviceName, analysis, fingerprint);
-            String path = ".logspectra/remediations/" + shortFp + ".md";
-            String blobSha = gitHubGitClient.createBlob(repo, markdown);
-            String treeSha = gitHubGitClient.createTree(repo, baseTree, path, blobSha);
-            String message = "docs(logspectra): remediation brief for " + shortFp;
+
+            Map<String, String> filesToCommit = new LinkedHashMap<>();
+            List<String> patchedPaths = collectSourcePatches(analysis, filesToCommit);
+            String markdownPath = ".logspectra/remediations/" + shortFp + ".md";
+            filesToCommit.put(markdownPath, buildRemediationMarkdown(projectId, serviceName, analysis, fingerprint));
+
+            List<GitHubGitClient.TreeEntry> treeEntries = new ArrayList<>();
+            for (Map.Entry<String, String> file : filesToCommit.entrySet()) {
+                String blobSha = gitHubGitClient.createBlob(repo, file.getValue());
+                treeEntries.add(new GitHubGitClient.TreeEntry(file.getKey(), blobSha));
+            }
+            String treeSha = gitHubGitClient.createTree(repo, baseTree, treeEntries);
+
+            boolean hasSourcePatches = !patchedPaths.isEmpty();
+            String message = hasSourcePatches
+                ? "fix(logspectra): remediate " + shortFp + " (" + patchedPaths.size() + " file(s))"
+                : "docs(logspectra): remediation brief for " + shortFp;
             String commitSha = gitHubGitClient.createCommit(
                 repo,
                 message,
@@ -104,7 +118,7 @@ public class RemediationPullRequestService {
                 StringUtils.hasText(analysis.getErrorSummary()) ? analysis.getErrorSummary() : "Remediation",
                 72
             );
-            String prBody = buildPullRequestBody(serviceName, analysis, path, fingerprint);
+            String prBody = buildPullRequestBody(serviceName, analysis, markdownPath, fingerprint, patchedPaths);
             Map<String, Object> pr = gitHubGitClient.createPullRequest(repo, title, prBody, branch, baseBranch);
             Integer number = pr.get("number") instanceof Number n ? n.intValue() : null;
             String htmlUrl = pr.get("html_url") != null ? String.valueOf(pr.get("html_url")) : null;
@@ -129,14 +143,36 @@ public class RemediationPullRequestService {
                 .commitSha(commitSha)
                 .build();
 
-            log.info("operation=createRemediationPr feature=github-app-pr status=exit service={} repo={} branch={} pr={} durationMs={}",
-                serviceName, repo.fullName(), branch, htmlUrl, System.currentTimeMillis() - started);
+            log.info("operation=createRemediationPr feature=github-app-pr status=exit service={} repo={} branch={} pr={} sourceFiles={} durationMs={}",
+                serviceName, repo.fullName(), branch, htmlUrl, patchedPaths.size(), System.currentTimeMillis() - started);
             return Optional.of(result);
         } catch (RuntimeException ex) {
             log.error("operation=createRemediationPr feature=github-app-pr status=error service={} repo={} error={} durationMs={}",
                 serviceName, repo.fullName(), ex.getMessage(), System.currentTimeMillis() - started, ex);
             return Optional.empty();
         }
+    }
+
+    private static List<String> collectSourcePatches(AnalysisResult analysis, Map<String, String> filesToCommit) {
+        List<String> patchedPaths = new ArrayList<>();
+        if (analysis.getSuggestedFixes() == null) {
+            return patchedPaths;
+        }
+        for (SuggestedFix fix : analysis.getSuggestedFixes()) {
+            if (!StringUtils.hasText(fix.getFilePath()) || !StringUtils.hasText(fix.getNewContent())) {
+                continue;
+            }
+            String path = fix.getFilePath().trim().replace('\\', '/');
+            if (path.startsWith("/")) {
+                path = path.substring(1);
+            }
+            if (path.contains("..") || path.startsWith(".git/")) {
+                continue;
+            }
+            filesToCommit.put(path, fix.getNewContent());
+            patchedPaths.add(path);
+        }
+        return patchedPaths;
     }
 
     private static List<String> parseReviewers(String csv) {
@@ -181,20 +217,31 @@ public class RemediationPullRequestService {
         } else {
             for (SuggestedFix fix : fixes) {
                 sb.append("- **").append(nullToEmpty(fix.getPriority())).append("**")
-                    .append(" (effort=").append(nullToEmpty(fix.getEffort())).append("): ")
-                    .append(nullToEmpty(fix.getFix())).append("\n");
+                    .append(" (effort=").append(nullToEmpty(fix.getEffort())).append(")");
+                if (StringUtils.hasText(fix.getFilePath())) {
+                    sb.append(" `").append(fix.getFilePath()).append("`");
+                }
+                sb.append(": ").append(nullToEmpty(fix.getFix())).append("\n");
             }
         }
-        sb.append("\n---\n_Generated by LogSpectra. Apply the fixes in application code, then merge this PR or close it._\n");
+        sb.append("\n---\n_Generated by LogSpectra (stateless GitHub Contents / Git Data API)._\n");
         return sb.toString();
     }
 
-    private static String buildPullRequestBody(String service, AnalysisResult analysis, String path, String fingerprint) {
+    private static String buildPullRequestBody(String service, AnalysisResult analysis, String path,
+                                               String fingerprint, List<String> patchedPaths) {
         String fixes = analysis.getSuggestedFixes() == null || analysis.getSuggestedFixes().isEmpty()
             ? "_None_"
             : analysis.getSuggestedFixes().stream()
-                .map(f -> "- [" + nullToEmpty(f.getPriority()) + "] " + nullToEmpty(f.getFix()))
+                .map(f -> "- [" + nullToEmpty(f.getPriority()) + "] "
+                    + (StringUtils.hasText(f.getFilePath()) ? "`" + f.getFilePath() + "` — " : "")
+                    + nullToEmpty(f.getFix()))
                 .collect(Collectors.joining("\n"));
+
+        String filesSection = patchedPaths.isEmpty()
+            ? "This PR adds `" + path + "` documenting the analysis. No source file patches were produced by the model."
+            : "This PR updates:\n" + patchedPaths.stream().map(p -> "- `" + p + "`").collect(Collectors.joining("\n"))
+                + "\n\nPlus brief: `" + path + "`";
 
         return """
             ## LogSpectra automated remediation
@@ -211,14 +258,14 @@ public class RemediationPullRequestService {
             ### Suggested fixes
             %s
 
-            ### Artifact
-            This PR adds `%s` documenting the analysis. It does **not** auto-patch Java/source yet.
+            ### Changes
+            %s
 
             ### Review
-            1. Confirm root cause
-            2. Implement / adjust the suggested fixes in code
+            1. Confirm root cause and inspect the source diffs
+            2. Adjust the patch if needed
             3. Approve (LGTM) once CI is green
-            4. Merge when ready — GitHub will email the author on approval
+            4. Merge when ready
 
             <!-- logspectra-fingerprint:%s -->
             """.formatted(
@@ -227,7 +274,7 @@ public class RemediationPullRequestService {
             nullToEmpty(analysis.getErrorSummary()),
             nullToEmpty(analysis.getRootCause()),
             fixes,
-            path,
+            filesSection,
             fingerprint
         );
     }

@@ -90,6 +90,7 @@ logspectra:
       token: ${LOGSPECTRA_REGISTRY_TOKEN:}
     code-context:
       enabled: true
+      # local | git | github — with github.app.enabled, RemoteSourceReader cascades to Contents API (no clone)
       provider: local
       max-snippets: 8
       context-lines: 20
@@ -144,3 +145,9 @@ github:
     commit-author-email: logspectra@users.noreply.github.com
     # Comma-separated GitHub usernames to request review from
     reviewers: ${GITHUB_PR_REVIEWERS:}
+  # Iterative tool loop (OpenAI): list_repo_files → get_file_content* → JSON patch
+  agent:
+    tool-calling-enabled: ${GITHUB_AGENT_TOOL_CALLING:true}
+    max-iterations: ${GITHUB_AGENT_MAX_ITERATIONS:8}
+    max-tree-entries: 400
+    max-file-chars: 60000

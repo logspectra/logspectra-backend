@@ -108,11 +108,39 @@ On each **service** repo:
 
 Author gets email when someone Approves; then merge (or enable **auto-merge** on the PR).
 
-## 7. What the PR contains today
+## 7. Iterative GitHub agent (tool loop) + PR
 
-- Branch + markdown brief under `.logspectra/remediations/`
-- PR body with summary / root cause / suggested fixes  
-- **Does not** auto-edit Java yet (safe first slice). Next step: LLM patch → Contents API multi-file commit.
+No `git clone` on the server. With **OpenAI** + `github.app.enabled` + registered `gitUrl`:
+
+```
+list_repo_files  →  get_file_content(path)  →  (repeat if needed)  →  JSON analysis + newContent
+                                                                              ↓
+                                                              create branch + commit + PR
+```
+
+Config (`application.yml`):
+
+```yaml
+github:
+  agent:
+    tool-calling-enabled: true
+    max-iterations: 8
+```
+
+Tools (OpenAI function calling):
+
+| Tool | Purpose |
+|------|---------|
+| `list_repo_files` | Recursive tree (optional `pathPrefix` / `query`) |
+| `get_file_content` | Fetch exact path into RAM |
+
+This is **iterative refinement**, not ML self-training — each analysis re-discovers files from the live repo.
+
+PR contents:
+
+- Source patches when the model returns `filePath` + `newContent`
+- Markdown brief under `.logspectra/remediations/<fingerprint>.md`
+- Dynamic branch: `logspectra/fix-<service>-<fp>-<timestamp>`
 
 ## 8. Verify
 

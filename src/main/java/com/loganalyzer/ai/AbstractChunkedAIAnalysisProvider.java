@@ -76,7 +76,7 @@ public abstract class AbstractChunkedAIAnalysisProvider implements AIAnalysisPro
                 ? promptBuilder.buildAnalysisPrompt(chunks.getFirst(), provider().name().toLowerCase())
                 : summarizeChunksThenAnalyze(chunks, request);
             String prompt = enrichWithCodeContext(basePrompt, deduped);
-            String response = callProvider(getAnalysisModel(), prompt, request, streamListener);
+            String response = callProvider(getAnalysisModel(), prompt, request, streamListener, deduped);
             AnalysisResult result = responseParser.parse(response);
             result.setFingerprint(fingerprint);
             result.setAnalyzedAt(Instant.now());
@@ -104,6 +104,7 @@ public abstract class AbstractChunkedAIAnalysisProvider implements AIAnalysisPro
     private LogDocument normalize(LogDocument log) {
         return LogDocument.builder()
             .id(log.getId())
+            .projectId(log.getProjectId())
             .timestamp(log.getTimestamp())
             .level(log.getLevel())
             .service(log.getService())
@@ -162,6 +163,18 @@ public abstract class AbstractChunkedAIAnalysisProvider implements AIAnalysisPro
                                   String userPrompt,
                                   AIAnalysisRequest request,
                                   AIStreamListener streamListener) {
+        return callProvider(model, userPrompt, request, streamListener, List.of());
+    }
+
+    /**
+     * Hook for providers that need log context (e.g. iterative GitHub tool loop).
+     * Default: same as {@link #callProvider(String, String, AIAnalysisRequest, AIStreamListener)}.
+     */
+    protected String callProvider(String model,
+                                  String userPrompt,
+                                  AIAnalysisRequest request,
+                                  AIStreamListener streamListener,
+                                  List<LogDocument> logs) {
         String response = callProvider(model, userPrompt, request);
         if (streamListener != null && streamListener.isEnabled() && StringUtils.hasText(response)) {
             streamListener.onToken(response);

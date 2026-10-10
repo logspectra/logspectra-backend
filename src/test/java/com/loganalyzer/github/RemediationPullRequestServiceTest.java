@@ -61,7 +61,7 @@ class RemediationPullRequestServiceTest {
         when(gitHubGitClient.getDefaultBranchSha(any(), eq("main"))).thenReturn("base-sha");
         when(gitHubGitClient.getCommitTreeSha(any(), eq("base-sha"))).thenReturn("tree-sha");
         when(gitHubGitClient.createBlob(any(), anyString())).thenReturn("blob-sha");
-        when(gitHubGitClient.createTree(any(), eq("tree-sha"), anyString(), eq("blob-sha"))).thenReturn("new-tree");
+        when(gitHubGitClient.createTree(any(), eq("tree-sha"), anyList())).thenReturn("new-tree");
         when(gitHubGitClient.createCommit(any(), anyString(), eq("new-tree"), eq("base-sha"), anyString(), anyString()))
             .thenReturn("commit-sha");
         when(gitHubGitClient.createPullRequest(any(), anyString(), anyString(), anyString(), eq("main")))
@@ -72,7 +72,13 @@ class RemediationPullRequestServiceTest {
             .errorSummary("Null pointer in checkout")
             .rootCause("Missing null check")
             .severity("HIGH")
-            .suggestedFixes(List.of(SuggestedFix.builder().fix("Add null guard").priority("HIGH").effort("LOW").build()))
+            .suggestedFixes(List.of(SuggestedFix.builder()
+                .fix("Add null guard")
+                .priority("HIGH")
+                .effort("LOW")
+                .filePath("src/main/java/com/example/Checkout.java")
+                .newContent("class Checkout {}")
+                .build()))
             .build();
 
         Optional<RemediationPullRequestResult> result =
@@ -83,6 +89,8 @@ class RemediationPullRequestServiceTest {
         assertEquals(42, result.get().getPullRequestNumber());
         assertTrue(result.get().getBranch().startsWith("logspectra/fix-gateway-service-abcdef12-"));
         verify(gitHubGitClient).createBranchRef(any(), eq(result.get().getBranch()), eq("commit-sha"));
+        verify(gitHubGitClient, times(2)).createBlob(any(), anyString());
+        verify(gitHubGitClient).createTree(any(), eq("tree-sha"), anyList());
     }
 
     @Test

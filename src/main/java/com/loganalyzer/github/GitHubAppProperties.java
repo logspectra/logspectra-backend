@@ -9,6 +9,7 @@ public class GitHubAppProperties {
 
     private App app = new App();
     private Pr pr = new Pr();
+    private Agent agent = new Agent();
 
     @Data
     public static class App {
@@ -42,5 +43,20 @@ public class GitHubAppProperties {
         private String commitAuthorName = "LogSpectra";
         private String commitAuthorEmail = "logspectra@users.noreply.github.com";
         private String reviewers = "";
+    }
+
+    /**
+     * Iterative GitHub tool-calling agent (list files → fetch by path → refine → JSON fix).
+     * Multi-step reasoning over live repo state — not ML model self-training.
+     */
+    @Data
+    public static class Agent {
+        /** When true (and app.enabled), OpenAI analysis uses the tool loop when a gitUrl is registered. */
+        private boolean toolCallingEnabled = true;
+        private int maxIterations = 8;
+        /** Cap recursive tree listing returned to the model. */
+        private int maxTreeEntries = 400;
+        /** Truncate file content returned by get_file_content. */
+        private int maxFileChars = 60_000;
     }
 }
