@@ -90,6 +90,7 @@ public class LogMapper {
                 .priority(fix.getPriority())
                 .effort(fix.getEffort())
                 .filePath(fix.getFilePath())
+                .newContent(fix.getNewContent())
                 .build())
             .toList();
     }

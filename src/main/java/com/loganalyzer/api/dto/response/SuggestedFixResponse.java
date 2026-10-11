@@ -14,4 +14,5 @@ public class SuggestedFixResponse {
     private String priority;
     private String effort;
     private String filePath;
+    private String newContent;
 }

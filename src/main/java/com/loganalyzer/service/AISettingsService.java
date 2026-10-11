@@ -49,6 +49,12 @@ public class AISettingsService {
     @Value("${ai.claude.api-version:2023-06-01}")
     private String claudeApiVersion;
 
+    @Value("${ai.gemini.base-url:https://generativelanguage.googleapis.com}")
+    private String geminiBaseUrl;
+
+    @Value("${ai.gemini.api-key:${GEMINI_API_KEY:${GOOGLE_API_KEY:}}}")
+    private String geminiApiKey;
+
     private final AISettingsRepository repository;
     private final CacheService cacheService;
 
@@ -157,6 +163,7 @@ public class AISettingsService {
             case OLLAMA -> fetchOllamaModelsFromApi();
             case OPENAI -> fetchOpenAiModelsFromApi();
             case CLAUDE -> fetchClaudeModelsFromApi();
+            case GEMINI -> fetchGeminiModelsFromApi();
         };
     }
 
@@ -265,8 +272,57 @@ public class AISettingsService {
             throw new IllegalArgumentException(request.getProvider() + " requires apiKey");
         }
 
+        if (request.getProvider() == AIProvider.GEMINI
+            && !StringUtils.hasText(request.getApiKey())
+            && !StringUtils.hasText(geminiApiKey)) {
+            throw new IllegalArgumentException("GEMINI requires apiKey");
+        }
+
         if (request.getProvider() == AIProvider.OLLAMA && !StringUtils.hasText(request.getBaseUrl())) {
             throw new IllegalArgumentException("OLLAMA requires baseUrl");
+        }
+    }
+
+    private List<String> fetchGeminiModelsFromApi() {
+        String apiKey = repository.findByProvider(AIProvider.GEMINI)
+            .map(AISettings::getApiKey)
+            .filter(StringUtils::hasText)
+            .orElse(geminiApiKey);
+
+        if (!StringUtils.hasText(apiKey)) {
+            return List.of("gemini-2.0-flash", "gemini-flash-latest");
+        }
+
+        String baseUrl = repository.findByProvider(AIProvider.GEMINI)
+            .map(AISettings::getBaseUrl)
+            .filter(StringUtils::hasText)
+            .orElse(geminiBaseUrl);
+
+        try {
+            RestClient restClient = RestClient.builder().baseUrl(baseUrl).build();
+            Map<?, ?> response = restClient.get()
+                .uri("/v1beta/models")
+                .accept(MediaType.APPLICATION_JSON)
+                .header("X-goog-api-key", apiKey)
+                .retrieve()
+                .body(Map.class);
+
+            if (response == null || !(response.get("models") instanceof List<?> models)) {
+                return List.of();
+            }
+
+            return models.stream()
+                .filter(Map.class::isInstance)
+                .map(Map.class::cast)
+                .map(model -> model.get("name"))
+                .filter(String.class::isInstance)
+                .map(String.class::cast)
+                .filter(StringUtils::hasText)
+                .map(name -> name.startsWith("models/") ? name.substring("models/".length()) : name)
+                .filter(name -> name.contains("gemini"))
+                .toList();
+        } catch (RuntimeException ex) {
+            throw new AIProviderModelsFetchException(AIProvider.GEMINI, "Failed to fetch Gemini models", ex);
         }
     }
 
@@ -276,9 +332,19 @@ public class AISettingsService {
 
     private void mapRequest(AISettings settings, AISettingsRequest request) {
         settings.setProvider(request.getProvider());
-        settings.setApiKey(request.getApiKey());
+        if (request.getProvider() == AIProvider.GEMINI
+            && !StringUtils.hasText(request.getApiKey())
+            && StringUtils.hasText(geminiApiKey)) {
+            settings.setApiKey(geminiApiKey);
+        } else {
+            settings.setApiKey(request.getApiKey());
+        }
         settings.setModelName(request.getModelName());
-        settings.setBaseUrl(request.getBaseUrl());
+        if (request.getProvider() == AIProvider.GEMINI && !StringUtils.hasText(request.getBaseUrl())) {
+            settings.setBaseUrl(geminiBaseUrl);
+        } else {
+            settings.setBaseUrl(request.getBaseUrl());
+        }
         if (request.getActive() != null) {
             settings.setActive(request.getActive());
         }

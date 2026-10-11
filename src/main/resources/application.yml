@@ -72,6 +72,9 @@ ai:
     base-url: ${AI_CLAUDE_BASE_URL:https://api.anthropic.com}
     api-key: ${AI_CLAUDE_API_KEY:${CLAUDE_API_KEY:}}
     api-version: ${AI_CLAUDE_API_VERSION:2023-06-01}
+  gemini:
+    base-url: ${AI_GEMINI_BASE_URL:https://generativelanguage.googleapis.com}
+    api-key: ${AI_GEMINI_API_KEY:${GEMINI_API_KEY:${GOOGLE_API_KEY:}}}
   ollama:
     host: ${AI_OLLAMA_HOST:localhost}
     port: ${AI_OLLAMA_PORT:11434}

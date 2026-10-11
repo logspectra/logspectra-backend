@@ -5,7 +5,8 @@ import java.util.Arrays;
 public enum AIProvider {
     OPENAI,
     OLLAMA,
-    CLAUDE;
+    CLAUDE,
+    GEMINI;
 
     public static AIProvider from(String value) {
         return Arrays.stream(values())
