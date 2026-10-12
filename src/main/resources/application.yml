@@ -1,6 +1,9 @@
 spring:
   application:
     name: logspectra-backend
+  mvc:
+    async:
+      request-timeout: -1
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/logspectra}
     username: ${SPRING_DATASOURCE_USERNAME:postgres}
@@ -40,7 +43,9 @@ spring:
       write-dates-as-timestamps: false
 
 server:
-  port: ${SERVER_PORT:8080}
+  port: ${SERVER_PORT:8081}
+  tomcat:
+    connection-timeout: 600000
 
 elasticsearch:
   uris: ${ELASTICSEARCH_URIS:http://localhost:9200}
@@ -67,12 +72,32 @@ ai:
     base-url: ${AI_CLAUDE_BASE_URL:https://api.anthropic.com}
     api-key: ${AI_CLAUDE_API_KEY:${CLAUDE_API_KEY:}}
     api-version: ${AI_CLAUDE_API_VERSION:2023-06-01}
+  gemini:
+    base-url: ${AI_GEMINI_BASE_URL:https://generativelanguage.googleapis.com}
+    api-key: ${AI_GEMINI_API_KEY:${GEMINI_API_KEY:${GOOGLE_API_KEY:}}}
   ollama:
     host: ${AI_OLLAMA_HOST:localhost}
     port: ${AI_OLLAMA_PORT:11434}
   rate-limit:
     requests-per-minute: ${AI_RATE_LIMIT_REQUESTS_PER_MINUTE:20}
     burst: ${AI_RATE_LIMIT_BURST:5}
+
+# Code-aware analysis (logspectra-ai).
+# Preferred: client services register git-url via starter → Redis.
+# YAML below is only a fallback for local-path on the backend host.
+logspectra:
+  ai:
+    enabled: true
+    registry:
+      # Optional shared secret; clients send X-LogSpectra-Registry-Token
+      token: ${LOGSPECTRA_REGISTRY_TOKEN:}
+    code-context:
+      enabled: true
+      # local | git | github — with github.app.enabled, RemoteSourceReader cascades to Contents API (no clone)
+      provider: local
+      max-snippets: 8
+      context-lines: 20
+      services: {}
 
 app:
   cors:
@@ -102,3 +127,30 @@ security:
     # base64-encoded 32-byte default key for local/dev; override via env in production
     secret: ${JWT_SECRET_BASE64:U2VjdXJlTG9nU3BlY3RyYUp3dEtleUZvckRldk9ubHkhMTIzNDU2}
     expiration-seconds: ${JWT_EXPIRATION_SECONDS:86400}
+
+# GitHub App → open remediation PRs in registered *service* repos (gateway, payment, …).
+# Setup: see SETUP-GITHUB-APP.md. No MCP required for runtime.
+github:
+  app:
+    enabled: ${GITHUB_APP_ENABLED:false}
+    app-id: ${GITHUB_APP_ID:}
+    installation-id: ${GITHUB_APP_INSTALLATION_ID:}
+    # Prefer file path locally; in K8s use a secret mounted as PEM or GITHUB_APP_PRIVATE_KEY
+    private-key-path: ${GITHUB_APP_PRIVATE_KEY_PATH:}
+    private-key: ${GITHUB_APP_PRIVATE_KEY:}
+    api-base-url: ${GITHUB_API_BASE_URL:https://api.github.com}
+  pr:
+    enabled: ${GITHUB_PR_ENABLED:true}
+    # When true, every successful analysis that has a registered gitUrl opens a PR
+    auto-create-after-analysis: ${GITHUB_PR_AUTO_CREATE:false}
+    branch-prefix: logspectra/fix
+    commit-author-name: LogSpectra
+    commit-author-email: logspectra@users.noreply.github.com
+    # Comma-separated GitHub usernames to request review from
+    reviewers: ${GITHUB_PR_REVIEWERS:}
+  # Iterative tool loop (OpenAI): list_repo_files → get_file_content* → JSON patch
+  agent:
+    tool-calling-enabled: ${GITHUB_AGENT_TOOL_CALLING:true}
+    max-iterations: ${GITHUB_AGENT_MAX_ITERATIONS:8}
+    max-tree-entries: 400
+    max-file-chars: 60000

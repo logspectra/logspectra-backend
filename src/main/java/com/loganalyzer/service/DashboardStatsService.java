@@ -8,24 +8,19 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class DashboardStatsService {
 
     private static final int DEFAULT_WINDOW_HOURS = 24;
-    private static final long DUMMY_TOTAL_LOGS = 1_284_402L;
-    private static final int DUMMY_TOTAL_LOGS_CHANGE_PERCENT = 12;
-    private static final long DUMMY_ERROR_COUNT = 3_847L;
-    private static final int DUMMY_ERROR_CHANGE_PERCENT = 23;
-    private static final List<String> DUMMY_AFFECTED_SERVICES =
-        List.of("api-gateway", "auth-service", "payment-service", "admin-service");
-    private static final long DUMMY_AI_CACHED = 38L;
-    private static final double DUMMY_AI_SAVED = 4.2d;
 
     private final LogElasticsearchRepository logRepository;
     private final AnalysisHistoryRepository analysisHistoryRepository;
@@ -41,6 +36,7 @@ public class DashboardStatsService {
         Duration window = Duration.between(effectiveFrom, effectiveTo);
         Instant previousFrom = effectiveFrom.minus(window);
         Instant previousTo = effectiveFrom;
+        String projectIdString = projectId.toString();
 
         try {
             long aiAnalysesRun = analysisHistoryRepository.countByProjectIdAndCreatedAtBetween(projectId, effectiveFrom, effectiveTo);
@@ -49,7 +45,6 @@ public class DashboardStatsService {
                 .sumCostUsdByProjectIdAndCreatedAtBetween(projectId, effectiveFrom, effectiveTo)
                 .setScale(2, RoundingMode.HALF_UP);
 
-            String projectIdString = projectId.toString();
             long totalLogs = logRepository.countLogs(effectiveFrom, effectiveTo, projectIdString);
             long previousTotalLogs = logRepository.countLogs(previousFrom, previousTo, projectIdString);
             long errorCount = logRepository.countErrors(effectiveFrom, effectiveTo, projectIdString);
@@ -69,24 +64,38 @@ public class DashboardStatsService {
                     .build())
                 .aiAnalysesRun(aiAnalysesRun)
                 .aiCached(aiCached)
-                .aiSaved(aiSavedReal.doubleValue() > 0 ? aiSavedReal.doubleValue() : DUMMY_AI_SAVED)
+                .aiSaved(aiSavedReal.doubleValue())
                 .build();
         } catch (IOException | RuntimeException ex) {
-            // Return deterministic demo values when stats data is unavailable.
-            return DashboardStatsResponse.builder()
-                .totalLogs(DUMMY_TOTAL_LOGS)
-                .totalLogsChangePercent(DUMMY_TOTAL_LOGS_CHANGE_PERCENT)
-                .errorCount(DUMMY_ERROR_COUNT)
-                .errorChangePercent(DUMMY_ERROR_CHANGE_PERCENT)
-                .affectedServices(DashboardStatsResponse.AffectedServices.builder()
-                    .count(DUMMY_AFFECTED_SERVICES.size())
-                    .services(DUMMY_AFFECTED_SERVICES)
-                    .build())
-                .aiAnalysesRun(142)
-                .aiCached(DUMMY_AI_CACHED)
-                .aiSaved(DUMMY_AI_SAVED)
-                .build();
+            log.warn("Dashboard stats unavailable for project {} — returning empty stats", projectId, ex);
+            return emptyStats(totalServicesFallback(projectIdString));
         }
+    }
+
+    private List<String> totalServicesFallback(String projectIdString) {
+        try {
+            return logRepository.totalServices(projectIdString);
+        } catch (IOException | RuntimeException ex) {
+            return Collections.emptyList();
+        }
+    }
+
+    private DashboardStatsResponse emptyStats(List<String> totalServices) {
+        return DashboardStatsResponse.builder()
+            .totalLogs(0)
+            .totalLogsChangePercent(0)
+            .errorCount(0)
+            .errorChangePercent(0)
+            .totalServices(totalServices)
+            .serviceCount(totalServices.size())
+            .affectedServices(DashboardStatsResponse.AffectedServices.builder()
+                .count(0)
+                .services(Collections.emptyList())
+                .build())
+            .aiAnalysesRun(0)
+            .aiCached(0)
+            .aiSaved(0)
+            .build();
     }
 
     private int calculateChangePercent(long current, long previous) {

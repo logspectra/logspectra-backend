@@ -17,11 +17,14 @@ import com.loganalyzer.domain.repository.AnalysisHistoryRepository;
 import com.loganalyzer.domain.repository.IssueGroupRepository;
 import com.loganalyzer.elasticsearch.document.LogDocument;
 import com.loganalyzer.elasticsearch.repository.LogElasticsearchRepository;
+import com.loganalyzer.github.RemediationPullRequestResult;
+import com.loganalyzer.github.RemediationPullRequestService;
 import com.loganalyzer.infrastructure.exception.ResourceNotFoundException;
 import java.io.IOException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import lombok.RequiredArgsConstructor;
@@ -42,6 +45,7 @@ public class LogAnalysisService {
     private final AISettingsService aiSettingsService;
     private final AnalysisHistoryRepository analysisHistoryRepository;
     private final IssueGroupRepository issueGroupRepository;
+    private final RemediationPullRequestService remediationPullRequestService;
 
     @Async("aiExecutor")
     public CompletableFuture<AnalysisResultResponse> analyze(AnalyzeRequest request,
@@ -49,7 +53,7 @@ public class LogAnalysisService {
                                                              AIStreamListener streamListener) {
         // Perform security validation within the async context
         long started = System.currentTimeMillis();
-        List<LogDocument> logs = resolveLogs(request, projectId);
+        List<LogDocument> logs = stampProjectId(resolveLogs(request, projectId), projectId);
         if (logs.isEmpty()) {
             throw new ResourceNotFoundException("No logs matched the analysis criteria");
         }
@@ -64,7 +68,19 @@ public class LogAnalysisService {
         var history = logMapper.toHistory(result, execution.getProviderUsed().name(), estimateTokens(logs), System.currentTimeMillis() - started, estimateCost(logs));
         history.setProjectId(projectId);
         analysisHistoryRepository.save(history);
-        return CompletableFuture.completedFuture(logMapper.toResponse(result));
+
+        AnalysisResultResponse response = logMapper.toResponse(result);
+        boolean wantPr = Boolean.TRUE.equals(request.getCreateRemediationPr());
+        if (remediationPullRequestService.shouldCreate(wantPr)) {
+            Optional<RemediationPullRequestResult> pr =
+                remediationPullRequestService.createForAnalysis(projectId, service, result);
+            pr.ifPresent(created -> {
+                response.setRemediationPrUrl(created.getPullRequestUrl());
+                response.setRemediationBranch(created.getBranch());
+                response.setRemediationPrNumber(created.getPullRequestNumber());
+            });
+        }
+        return CompletableFuture.completedFuture(response);
     }
 
     private AIAnalysisRequest resolveAIRequest(AnalyzeRequest request) {
@@ -98,6 +114,20 @@ public class LogAnalysisService {
 
     private String valueAsString(Object value) {
         return value == null ? null : String.valueOf(value);
+    }
+
+    /** Ensures Redis code-registry / remote GitHub lookup can resolve the active project. */
+    private static List<LogDocument> stampProjectId(List<LogDocument> logs, UUID projectId) {
+        if (logs == null || projectId == null) {
+            return logs;
+        }
+        String id = projectId.toString();
+        for (LogDocument doc : logs) {
+            if (doc != null && !StringUtils.hasText(doc.getProjectId())) {
+                doc.setProjectId(id);
+            }
+        }
+        return logs;
     }
 
     private List<LogDocument> resolveLogs(AnalyzeRequest request, UUID projectId) {

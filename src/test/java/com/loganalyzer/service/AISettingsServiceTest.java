@@ -71,7 +71,6 @@ class AISettingsServiceTest {
     @Test
     void getActiveShouldReturnActiveSettings() {
         when(cacheService.getActiveAISettings()).thenReturn(Optional.of(aiSettings));
-        when(aiSettingsRepository.findByIsActiveTrue()).thenReturn(Optional.of(aiSettings));
 
         AISettingsResponse response = aiSettingsService.getActive();
 

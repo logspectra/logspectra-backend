@@ -48,7 +48,12 @@ public class SecurityConfig {
             .authenticationProvider(daoAuthenticationProvider)
             .authorizeHttpRequests(auth -> auth
                     .dispatcherTypeMatchers(DispatcherType.ASYNC).permitAll()
-                .requestMatchers("/api/v1/auth/login", "/actuator/health", "/api-docs").permitAll()
+                .requestMatchers(
+                    "/api/v1/auth/login",
+                    "/actuator/health",
+                    "/api-docs",
+                    "/api/v1/services/code-registry"
+                ).permitAll()
                 .anyRequest().authenticated()
             )
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
@@ -62,7 +67,7 @@ public class SecurityConfig {
         corsConfiguration.setAllowedOriginPatterns(java.util.List.of("*"));
         corsConfiguration.setAllowedMethods(java.util.List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
         corsConfiguration.setAllowedHeaders(java.util.List.of("*"));
-        corsConfiguration.setAllowCredentials(true);
+        corsConfiguration.setAllowCredentials(false);
         corsConfiguration.setMaxAge(3600L);
         // Allow custom headers used for authorization
         corsConfiguration.addExposedHeader("Authorization");

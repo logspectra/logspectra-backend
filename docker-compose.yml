@@ -38,7 +38,7 @@ services:
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
 
   elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.2
+    image: elasticsearch:8.15.2
     environment:
       discovery.type: single-node
       xpack.security.enabled: 'false'
@@ -77,6 +77,10 @@ services:
       AI_CLAUDE_API_KEY: ${AI_CLAUDE_API_KEY:-}
       CLAUDE_API_KEY: ${CLAUDE_API_KEY:-}
       AI_CLAUDE_API_VERSION: ${AI_CLAUDE_API_VERSION:-2023-06-01}
+      AI_GEMINI_BASE_URL: ${AI_GEMINI_BASE_URL:-https://generativelanguage.googleapis.com}
+      AI_GEMINI_API_KEY: ${AI_GEMINI_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
       AI_OLLAMA_HOST: ${AI_OLLAMA_HOST:-host.docker.internal}
       AI_OLLAMA_PORT: ${AI_OLLAMA_PORT:-11434}
     ports:

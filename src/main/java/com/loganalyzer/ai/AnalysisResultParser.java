@@ -28,6 +28,8 @@ public class AnalysisResultParser {
                     .fix(item.path("fix").asText())
                     .priority(item.path("priority").asText())
                     .effort(item.path("effort").asText())
+                    .filePath(textOrNull(item, "filePath"))
+                    .newContent(textOrNull(item, "newContent"))
                     .build()));
             }
             return AnalysisResult.builder()
@@ -56,5 +58,14 @@ public class AnalysisResultParser {
             node.forEach(item -> values.add(item.asText()));
         }
         return values;
+    }
+
+    private static String textOrNull(JsonNode item, String field) {
+        JsonNode node = item.path(field);
+        if (node.isMissingNode() || node.isNull()) {
+            return null;
+        }
+        String text = node.asText();
+        return text == null || text.isBlank() ? null : text;
     }
 }

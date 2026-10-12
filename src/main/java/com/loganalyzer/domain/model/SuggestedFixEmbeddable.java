@@ -13,12 +13,23 @@ public class SuggestedFixEmbeddable {
     private String fix;
     private String priority;
     private String effort;
+    private String filePath;
 
     public static SuggestedFixEmbeddable fromModel(SuggestedFix model) {
-        return new SuggestedFixEmbeddable(model.getFix(), model.getPriority(), model.getEffort());
+        return new SuggestedFixEmbeddable(
+            model.getFix(),
+            model.getPriority(),
+            model.getEffort(),
+            model.getFilePath()
+        );
     }
 
     public SuggestedFix toModel() {
-        return SuggestedFix.builder().fix(fix).priority(priority).effort(effort).build();
+        return SuggestedFix.builder()
+            .fix(fix)
+            .priority(priority)
+            .effort(effort)
+            .filePath(filePath)
+            .build();
     }
 }

@@ -14,12 +14,14 @@ import com.loganalyzer.api.dto.request.AnalyzeRequest;
 import com.loganalyzer.api.dto.response.AnalysisResultResponse;
 import com.loganalyzer.api.mapper.LogMapper;
 import com.loganalyzer.domain.model.AISettings;
+import com.loganalyzer.domain.model.AnalysisHistory;
 import com.loganalyzer.domain.model.AnalysisResult;
 import com.loganalyzer.domain.model.IssueGroup;
 import com.loganalyzer.domain.repository.AnalysisHistoryRepository;
 import com.loganalyzer.domain.repository.IssueGroupRepository;
 import com.loganalyzer.elasticsearch.document.LogDocument;
 import com.loganalyzer.elasticsearch.repository.LogElasticsearchRepository;
+import com.loganalyzer.github.RemediationPullRequestService;
 import com.loganalyzer.infrastructure.exception.ResourceNotFoundException;
 
 import java.io.IOException;
@@ -39,7 +41,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class LogAnalysisServiceTest {
 
     @Mock
-    private LogElasticsearchRepository logRepository;
+    private LogElasticsearchRepository repository;
 
     @Mock
     private DynamicAIAnalysisService aiAnalysisService;
@@ -58,6 +60,9 @@ class LogAnalysisServiceTest {
 
     @Mock
     private IssueGroupRepository issueGroupRepository;
+
+    @Mock
+    private RemediationPullRequestService remediationPullRequestService;
 
     @InjectMocks
     private LogAnalysisService logAnalysisService;
@@ -99,7 +104,7 @@ class LogAnalysisServiceTest {
 
     @Test
     void analyzeShouldThrowWhenNoLogsFound() throws IOException {
-        when(logRepository.fetchLogsForAnalysis(anyString(), anyString())).thenReturn(List.of());
+        when(repository.fetchLogsForAnalysis(anyString(), anyString())).thenReturn(List.of());
 
         assertThrows(ResourceNotFoundException.class, () ->
             logAnalysisService.analyze(analyzeRequest, projectId, mock(AIStreamListener.class))
@@ -124,7 +129,7 @@ class LogAnalysisServiceTest {
             .severity(mockAnalysisResult.getSeverity())
             .build();
 
-        when(logRepository.fetchLogsForAnalysis("trace-123", projectId.toString()))
+        when(repository.fetchLogsForAnalysis("trace-123", projectId.toString()))
             .thenReturn(mockLogs);
         when(aiSettingsService.getActiveSettingsEntity())
             .thenReturn(mockSettings);
@@ -132,8 +137,11 @@ class LogAnalysisServiceTest {
             .thenReturn(execution);
         when(logMapper.toResponse(mockAnalysisResult))
             .thenReturn(expectedResponse);
+        when(logMapper.toHistory(any(), anyString(), anyInt(), anyLong(), anyDouble()))
+            .thenReturn(AnalysisHistory.builder().fingerprint("fp-123").build());
         when(issueGroupRepository.findByProjectIdAndFingerprint(projectId, "fp-123"))
             .thenReturn(Optional.empty());
+        when(remediationPullRequestService.shouldCreate(false)).thenReturn(false);
 
         CompletableFuture<AnalysisResultResponse> result = logAnalysisService.analyze(analyzeRequest, projectId, streamListener);
 
@@ -161,7 +169,7 @@ class LogAnalysisServiceTest {
             .severity(mockAnalysisResult.getSeverity())
             .build();
 
-        when(logRepository.fetchLogsForAnalysis("trace-123", projectId.toString()))
+        when(repository.fetchLogsForAnalysis("trace-123", projectId.toString()))
             .thenReturn(mockLogs);
         when(aiSettingsService.getActiveSettingsEntity())
             .thenReturn(mockSettings);
@@ -169,8 +177,11 @@ class LogAnalysisServiceTest {
             .thenReturn(execution);
         when(logMapper.toResponse(mockAnalysisResult))
             .thenReturn(expectedResponse);
+        when(logMapper.toHistory(any(), anyString(), anyInt(), anyLong(), anyDouble()))
+            .thenReturn(AnalysisHistory.builder().fingerprint("fp-123").build());
         when(issueGroupRepository.findByProjectIdAndFingerprint(projectId, "fp-123"))
             .thenReturn(Optional.empty());
+        when(remediationPullRequestService.shouldCreate(false)).thenReturn(false);
 
         CompletableFuture<AnalysisResultResponse> result = logAnalysisService.analyze(analyzeRequest, projectId, streamListener);
         result.get();
@@ -211,7 +222,7 @@ class LogAnalysisServiceTest {
             .severity(mockAnalysisResult.getSeverity())
             .build();
 
-        when(logRepository.fetchLogsForAnalysis("trace-123", projectId.toString()))
+        when(repository.fetchLogsForAnalysis("trace-123", projectId.toString()))
             .thenReturn(mockLogs);
         when(aiSettingsService.getActiveSettingsEntity())
             .thenReturn(mockSettings);
@@ -219,8 +230,11 @@ class LogAnalysisServiceTest {
             .thenReturn(execution);
         when(logMapper.toResponse(mockAnalysisResult))
             .thenReturn(expectedResponse);
+        when(logMapper.toHistory(any(), anyString(), anyInt(), anyLong(), anyDouble()))
+            .thenReturn(AnalysisHistory.builder().fingerprint("fp-123").build());
         when(issueGroupRepository.findByProjectIdAndFingerprint(projectId, "fp-123"))
             .thenReturn(Optional.of(existingIssue));
+        when(remediationPullRequestService.shouldCreate(false)).thenReturn(false);
 
         CompletableFuture<AnalysisResultResponse> result = logAnalysisService.analyze(analyzeRequest, projectId, streamListener);
         result.get();

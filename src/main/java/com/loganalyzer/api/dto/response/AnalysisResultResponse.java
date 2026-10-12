@@ -21,4 +21,8 @@ public class AnalysisResultResponse {
     private Instant analyzedAt;
     private boolean cachedResult;
     private boolean cached;
+    /** Present when a GitHub remediation PR was opened for the service repo. */
+    private String remediationPrUrl;
+    private String remediationBranch;
+    private Integer remediationPrNumber;
 }

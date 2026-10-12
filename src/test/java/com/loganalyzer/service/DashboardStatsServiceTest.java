@@ -69,14 +69,14 @@ class DashboardStatsServiceTest {
 
         DashboardStatsResponse response = dashboardStatsService.getStats(projectId, from, to);
 
-        assertEquals(1_284_402L, response.getTotalLogs());
-        assertEquals(12, response.getTotalLogsChangePercent());
-        assertEquals(3_847L, response.getErrorCount());
-        assertEquals(23, response.getErrorChangePercent());
-        assertEquals(4, response.getAffectedServices().getCount());
-        assertEquals(142L, response.getAiAnalysesRun());
-        assertEquals(38L, response.getAiCached());
-        assertEquals(4.2d, response.getAiSaved());
+        assertEquals(0L, response.getTotalLogs());
+        assertEquals(0, response.getTotalLogsChangePercent());
+        assertEquals(0L, response.getErrorCount());
+        assertEquals(0, response.getErrorChangePercent());
+        assertEquals(0, response.getAffectedServices().getCount());
+        assertEquals(0L, response.getAiAnalysesRun());
+        assertEquals(0L, response.getAiCached());
+        assertEquals(0.0d, response.getAiSaved());
     }
 
     @Test

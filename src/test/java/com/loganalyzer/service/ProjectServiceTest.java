@@ -1,6 +1,7 @@
 package com.loganalyzer.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.anyIterable;
 import static org.mockito.Mockito.when;
 
 import com.loganalyzer.api.dto.response.ProjectResponse;
@@ -55,7 +56,7 @@ class ProjectServiceTest {
         when(userProjectRepository.findAllByIdUserId(userId)).thenReturn(List.of(
             UserProject.builder().id(new UserProjectId(userId, projectId)).role(UserProjectRole.ADMIN).build()
         ));
-        when(projectRepository.findAllById(List.of(projectId))).thenReturn(List.of(project));
+        when(projectRepository.findAllById(anyIterable())).thenReturn(List.of(project));
         when(logElasticsearchRepository.totalServices(projectId.toString())).thenReturn(List.of("api", "auth", "billing"));
 
         List<ProjectResponse> response = projectService.listProjects(userId);

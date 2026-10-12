@@ -9,6 +9,7 @@ import com.loganalyzer.elasticsearch.document.LogDocument;
 import com.loganalyzer.infrastructure.exception.AIAnalysisException;
 import com.loganalyzer.infrastructure.ratelimit.AIRateLimiter;
 import com.loganalyzer.service.CacheService;
+import com.logspectra.ai.LogSpectraAiFacade;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -28,6 +29,8 @@ public abstract class AbstractChunkedAIAnalysisProvider implements AIAnalysisPro
     private final CacheService cacheService;
     private final AIRateLimiter rateLimiter;
     private final AnalysisResultParser responseParser;
+    private final LogSpectraAiFacade logSpectraAiFacade;
+    private final AiLogEventMapper aiLogEventMapper;
 
     protected AbstractChunkedAIAnalysisProvider(PromptBuilder promptBuilder,
                                                 LogChunker chunker,
@@ -35,7 +38,9 @@ public abstract class AbstractChunkedAIAnalysisProvider implements AIAnalysisPro
                                                 StackTraceNormalizer stackTraceNormalizer,
                                                 CacheService cacheService,
                                                 AIRateLimiter rateLimiter,
-                                                AnalysisResultParser responseParser) {
+                                                AnalysisResultParser responseParser,
+                                                LogSpectraAiFacade logSpectraAiFacade,
+                                                AiLogEventMapper aiLogEventMapper) {
         this.promptBuilder = promptBuilder;
         this.chunker = chunker;
         this.summarizer = summarizer;
@@ -43,6 +48,8 @@ public abstract class AbstractChunkedAIAnalysisProvider implements AIAnalysisPro
         this.cacheService = cacheService;
         this.rateLimiter = rateLimiter;
         this.responseParser = responseParser;
+        this.logSpectraAiFacade = logSpectraAiFacade;
+        this.aiLogEventMapper = aiLogEventMapper;
     }
 
     @Override
@@ -65,10 +72,11 @@ public abstract class AbstractChunkedAIAnalysisProvider implements AIAnalysisPro
         List<LogDocument> deduped = chunker.deduplicate(normalized);
         List<List<LogDocument>> chunks = chunker.chunk(deduped);
         try {
-            String prompt = chunks.size() == 1
+            String basePrompt = chunks.size() == 1
                 ? promptBuilder.buildAnalysisPrompt(chunks.getFirst(), provider().name().toLowerCase())
                 : summarizeChunksThenAnalyze(chunks, request);
-            String response = callProvider(getAnalysisModel(), prompt, request, streamListener);
+            String prompt = enrichWithCodeContext(basePrompt, deduped);
+            String response = callProvider(getAnalysisModel(), prompt, request, streamListener, deduped);
             AnalysisResult result = responseParser.parse(response);
             result.setFingerprint(fingerprint);
             result.setAnalyzedAt(Instant.now());
@@ -81,9 +89,22 @@ public abstract class AbstractChunkedAIAnalysisProvider implements AIAnalysisPro
         }
     }
 
+    private String enrichWithCodeContext(String basePrompt, List<LogDocument> logs) {
+        if (logSpectraAiFacade == null || aiLogEventMapper == null || !logSpectraAiFacade.isCodeContextEnabled()) {
+            return basePrompt;
+        }
+        String service = logs.stream()
+            .map(LogDocument::getService)
+            .filter(StringUtils::hasText)
+            .findFirst()
+            .orElse("unknown-service");
+        return logSpectraAiFacade.enrichPrompt(basePrompt, service, aiLogEventMapper.toAiLogEvents(logs));
+    }
+
     private LogDocument normalize(LogDocument log) {
         return LogDocument.builder()
             .id(log.getId())
+            .projectId(log.getProjectId())
             .timestamp(log.getTimestamp())
             .level(log.getLevel())
             .service(log.getService())
@@ -142,6 +163,18 @@ public abstract class AbstractChunkedAIAnalysisProvider implements AIAnalysisPro
                                   String userPrompt,
                                   AIAnalysisRequest request,
                                   AIStreamListener streamListener) {
+        return callProvider(model, userPrompt, request, streamListener, List.of());
+    }
+
+    /**
+     * Hook for providers that need log context (e.g. iterative GitHub tool loop).
+     * Default: same as {@link #callProvider(String, String, AIAnalysisRequest, AIStreamListener)}.
+     */
+    protected String callProvider(String model,
+                                  String userPrompt,
+                                  AIAnalysisRequest request,
+                                  AIStreamListener streamListener,
+                                  List<LogDocument> logs) {
         String response = callProvider(model, userPrompt, request);
         if (streamListener != null && streamListener.isEnabled() && StringUtils.hasText(response)) {
             streamListener.onToken(response);

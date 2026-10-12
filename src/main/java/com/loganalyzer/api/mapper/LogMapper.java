@@ -85,7 +85,13 @@ public class LogMapper {
 
     private List<SuggestedFixResponse> mapSuggestedFixes(List<com.loganalyzer.domain.model.SuggestedFix> fixes) {
         return fixes == null ? List.of() : fixes.stream()
-            .map(fix -> SuggestedFixResponse.builder().fix(fix.getFix()).priority(fix.getPriority()).effort(fix.getEffort()).build())
+            .map(fix -> SuggestedFixResponse.builder()
+                .fix(fix.getFix())
+                .priority(fix.getPriority())
+                .effort(fix.getEffort())
+                .filePath(fix.getFilePath())
+                .newContent(fix.getNewContent())
+                .build())
             .toList();
     }
 }

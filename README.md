@@ -11,7 +11,7 @@ This project is licensed under the Apache License 2.0. See `LICENSE` for the ful
 - Ingests service logs from Kafka and indexes them into Elasticsearch.
 - Exposes REST APIs for search, analytics, projects, users, severity rules, and AI settings.
 - Streams live logs and AI analysis tokens/events to clients using SSE.
-- Publishes error alerts to Kafka and WebSocket topics.
+- Publishes error alerts to Kafka and SSE (`alert` events on the live log stream).
 - Persists operational data in PostgreSQL and uses Redis for runtime support.
 
 ## Architecture Overview
@@ -20,7 +20,7 @@ This project is licensed under the Apache License 2.0. See `LICENSE` for the ful
 Producer Apps -> Kafka(service-logs) -> LogIngestionConsumer
                                    |-> Elasticsearch (search/analytics)
                                    |-> Kafka(error-alerts)
-                                   |-> SSE / WebSocket push
+                                   |-> SSE push (/api/v1/logs/stream)
 
 Frontend -> REST API (/api/v1/*) -> Services -> PostgreSQL / Elasticsearch / AI Providers
 Frontend -> SSE (/api/v1/logs/stream, /api/v1/logs/analyze)

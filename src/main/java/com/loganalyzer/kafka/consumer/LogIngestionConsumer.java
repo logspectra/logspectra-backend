@@ -1,11 +1,10 @@
 package com.loganalyzer.kafka.consumer;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.loganalyzer.elasticsearch.document.LogDocument;
 import com.loganalyzer.elasticsearch.repository.LogElasticsearchRepository;
 import com.loganalyzer.kafka.producer.AlertProducer;
-import com.loganalyzer.service.LogStreamingService;
+import com.loganalyzer.service.LiveLogStreamFanoutService;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -13,7 +12,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.springframework.kafka.annotation.KafkaListener;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -22,11 +20,10 @@ import org.springframework.util.StringUtils;
 @Slf4j
 public class LogIngestionConsumer {
 
-    private final ObjectMapper objectMapper;
+    private final KafkaLogDocumentMapper kafkaLogDocumentMapper;
     private final LogElasticsearchRepository repository;
     private final AlertProducer alertProducer;
-    private final LogStreamingService logStreamingService;
-    private final SimpMessagingTemplate simpMessagingTemplate;
+    private final LiveLogStreamFanoutService liveLogStreamFanoutService;
 
     @KafkaListener(
         topics = "${kafka.topics.service-logs:service-logs}",
@@ -44,7 +41,7 @@ public class LogIngestionConsumer {
             }
 
             try {
-                LogDocument logDocument = objectMapper.readValue(payload, LogDocument.class);
+                LogDocument logDocument = kafkaLogDocumentMapper.fromKafkaPayload(payload);
                 if (logDocument.getTimestamp() == null) {
                     logDocument.setTimestamp(java.time.Instant.now());
                 }
@@ -53,12 +50,10 @@ public class LogIngestionConsumer {
                 }
                 batch.add(logDocument);
                 log.info("Processing log record offset={} service={} level={}", record.offset(), logDocument.getService(), logDocument.getLevel());
-                simpMessagingTemplate.convertAndSend("/topic/logs/" + logDocument.getProjectId(), logDocument);
+                liveLogStreamFanoutService.fanout(logDocument);
                 if ("ERROR".equalsIgnoreCase(logDocument.getLevel())) {
-                    simpMessagingTemplate.convertAndSend("/topic/alerts", logDocument);
                     alertProducer.sendAlert(logDocument);
                 }
-                logStreamingService.publish(logDocument);
             } catch (JsonProcessingException ex) {
                 log.warn(
                     "Skipping malformed Kafka JSON topic={} partition={} offset={} reason={} payloadPreview={}",

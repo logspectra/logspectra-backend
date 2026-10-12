@@ -30,11 +30,20 @@ public class PromptBuilder {
               "errorPattern": "pattern or fingerprint of the error",
               "severity": "CRITICAL|HIGH|MEDIUM|LOW",
               "suggestedFixes": [
-                { "fix": "description", "priority": "HIGH", "effort": "LOW" }
+                {
+                  "fix": "description of the change",
+                  "priority": "HIGH",
+                  "effort": "LOW",
+                  "filePath": "src/main/java/.../ClassName.java (when you can identify the file)",
+                  "newContent": "FULL updated file source when proposing a concrete patch; omit if uncertain"
+                }
               ],
               "relatedTraceIds": ["traceId1"],
               "confidence": 0.0
             }
+
+            When code snippets are provided above, prefer returning filePath + newContent for at least
+            one high-confidence fix so a remediation PR can commit the change without a local clone.
             """,
             context,
             logs.isEmpty() ? "N/A" : logs.get(0).getTimestamp(),
