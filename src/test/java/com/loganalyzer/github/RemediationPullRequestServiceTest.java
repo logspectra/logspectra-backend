@@ -58,8 +58,10 @@ class RemediationPullRequestServiceTest {
                 .defaultBranch("main")
                 .build()));
 
+        when(gitHubGitClient.getBranchTipSha(any(), anyString())).thenReturn(Optional.empty());
         when(gitHubGitClient.getDefaultBranchSha(any(), eq("main"))).thenReturn("base-sha");
         when(gitHubGitClient.getCommitTreeSha(any(), eq("base-sha"))).thenReturn("tree-sha");
+        when(gitHubGitClient.findOpenPullRequest(any(), anyString())).thenReturn(Optional.empty());
         when(gitHubGitClient.createBlob(any(), anyString())).thenReturn("blob-sha");
         when(gitHubGitClient.createTree(any(), eq("tree-sha"), anyList())).thenReturn("new-tree");
         when(gitHubGitClient.createCommit(any(), anyString(), eq("new-tree"), eq("base-sha"), anyString(), anyString()))
@@ -87,10 +89,49 @@ class RemediationPullRequestServiceTest {
         assertTrue(result.isPresent());
         assertEquals("https://github.com/acme/gateway-service/pull/42", result.get().getPullRequestUrl());
         assertEquals(42, result.get().getPullRequestNumber());
-        assertTrue(result.get().getBranch().startsWith("logspectra/fix-gateway-service-abcdef12-"));
-        verify(gitHubGitClient).createBranchRef(any(), eq(result.get().getBranch()), eq("commit-sha"));
+        assertEquals("logspectra/fix-gateway-service-abcdef12", result.get().getBranch());
+        verify(gitHubGitClient).createBranchRef(any(), eq("logspectra/fix-gateway-service-abcdef12"), eq("commit-sha"));
+        verify(gitHubGitClient, never()).updateBranchRef(any(), anyString(), anyString());
         verify(gitHubGitClient, times(2)).createBlob(any(), anyString());
         verify(gitHubGitClient).createTree(any(), eq("tree-sha"), anyList());
+    }
+
+    @Test
+    void createForAnalysisReusesBranchAndPrOnSecondDebug() {
+        UUID projectId = UUID.randomUUID();
+        String branch = "logspectra/fix-gateway-service-abcdef12";
+        when(codeRegistryService.find(eq(projectId.toString()), eq("gateway-service")))
+            .thenReturn(Optional.of(ServiceSourceMapping.builder()
+                .serviceName("gateway-service")
+                .gitUrl("https://github.com/acme/gateway-service.git")
+                .defaultBranch("main")
+                .build()));
+
+        when(gitHubGitClient.getBranchTipSha(any(), eq(branch))).thenReturn(Optional.of("tip-sha"));
+        when(gitHubGitClient.getCommitTreeSha(any(), eq("tip-sha"))).thenReturn("tip-tree");
+        when(gitHubGitClient.createBlob(any(), anyString())).thenReturn("blob-sha");
+        when(gitHubGitClient.createTree(any(), eq("tip-tree"), anyList())).thenReturn("new-tree");
+        when(gitHubGitClient.createCommit(any(), anyString(), eq("new-tree"), eq("tip-sha"), anyString(), anyString()))
+            .thenReturn("commit-sha-2");
+        when(gitHubGitClient.findOpenPullRequest(any(), eq(branch)))
+            .thenReturn(Optional.of(Map.of("number", 7, "html_url", "https://github.com/acme/gateway-service/pull/7")));
+
+        AnalysisResult analysis = AnalysisResult.builder()
+            .fingerprint("abcdef123456")
+            .errorSummary("Still failing")
+            .rootCause("Same bug")
+            .build();
+
+        Optional<RemediationPullRequestResult> result =
+            service.createForAnalysis(projectId, "gateway-service", analysis);
+
+        assertTrue(result.isPresent());
+        assertEquals(branch, result.get().getBranch());
+        assertEquals(7, result.get().getPullRequestNumber());
+        verify(gitHubGitClient).updateBranchRef(any(), eq(branch), eq("commit-sha-2"));
+        verify(gitHubGitClient, never()).createBranchRef(any(), anyString(), anyString());
+        verify(gitHubGitClient, never()).createPullRequest(any(), anyString(), anyString(), anyString(), anyString());
+        verify(gitHubGitClient, never()).getDefaultBranchSha(any(), anyString());
     }
 
     @Test

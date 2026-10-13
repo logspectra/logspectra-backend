@@ -2,7 +2,9 @@ package com.loganalyzer.ai;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.loganalyzer.ai.agent.GitHubAgentBridge;
 import com.loganalyzer.ai.preprocessing.LogChunker;
+import com.loganalyzer.elasticsearch.document.LogDocument;
 import com.loganalyzer.ai.preprocessing.LogSummarizer;
 import com.loganalyzer.ai.preprocessing.StackTraceNormalizer;
 import com.loganalyzer.ai.prompt.PromptBuilder;
@@ -33,6 +35,7 @@ public class ClaudeAnalysisService extends AbstractChunkedAIAnalysisProvider {
     private static final HttpClient HTTP_CLIENT = HttpClient.newBuilder().build();
 
     private final PromptBuilder promptBuilder;
+    private final GitHubAgentBridge githubAgentBridge;
 
     public ClaudeAnalysisService(PromptBuilder promptBuilder,
                                  LogChunker chunker,
@@ -42,10 +45,12 @@ public class ClaudeAnalysisService extends AbstractChunkedAIAnalysisProvider {
                                  AIRateLimiter rateLimiter,
                                  AnalysisResultParser responseParser,
                                  LogSpectraAiFacade logSpectraAiFacade,
-                                 AiLogEventMapper aiLogEventMapper) {
+                                 AiLogEventMapper aiLogEventMapper,
+                                 GitHubAgentBridge githubAgentBridge) {
         super(promptBuilder, chunker, summarizer, stackTraceNormalizer, cacheService, rateLimiter, responseParser,
             logSpectraAiFacade, aiLogEventMapper);
         this.promptBuilder = promptBuilder;
+        this.githubAgentBridge = githubAgentBridge;
     }
 
     @Override
@@ -102,6 +107,17 @@ public class ClaudeAnalysisService extends AbstractChunkedAIAnalysisProvider {
         }
 
         return textNode.asText();
+    }
+
+    @Override
+    protected String callProvider(String model,
+                                  String userPrompt,
+                                  AIAnalysisRequest request,
+                                  AIStreamListener streamListener,
+                                  List<LogDocument> logs) {
+        return githubAgentBridge
+            .tryRun(AIProvider.CLAUDE, model, userPrompt, request, logs, streamListener, DEFAULT_BASE_URL)
+            .orElseGet(() -> callProvider(model, userPrompt, request, streamListener));
     }
 
     @Override

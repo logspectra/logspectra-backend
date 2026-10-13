@@ -40,6 +40,11 @@ public class GitHubAppProperties {
         private boolean enabled = true;
         private boolean autoCreateAfterAnalysis = false;
         private String branchPrefix = "logspectra/fix";
+        /**
+         * When true (default), one branch per service + error fingerprint — repeat Debug amends that
+         * branch and reuses an open PR instead of creating logspectra/fix-...-&lt;timestamp&gt; each time.
+         */
+        private boolean reuseBranchPerFingerprint = true;
         private String commitAuthorName = "LogSpectra";
         private String commitAuthorEmail = "logspectra@users.noreply.github.com";
         private String reviewers = "";

@@ -1,7 +1,9 @@
 package com.loganalyzer.ai;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.loganalyzer.ai.agent.GitHubAgentBridge;
 import com.loganalyzer.ai.preprocessing.LogChunker;
+import com.loganalyzer.elasticsearch.document.LogDocument;
 import com.loganalyzer.ai.preprocessing.LogSummarizer;
 import com.loganalyzer.ai.preprocessing.StackTraceNormalizer;
 import com.loganalyzer.ai.prompt.PromptBuilder;
@@ -10,6 +12,7 @@ import com.loganalyzer.infrastructure.ratelimit.AIRateLimiter;
 import com.loganalyzer.service.CacheService;
 import com.logspectra.ai.LogSpectraAiFacade;
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
@@ -22,6 +25,8 @@ public class OllamaAnalysisService extends AbstractChunkedAIAnalysisProvider {
 
     private static final String DEFAULT_BASE_URL = "http://localhost:11434";
     private static final String DEFAULT_MODEL = "llama3";
+    private final GitHubAgentBridge githubAgentBridge;
+
     public OllamaAnalysisService(PromptBuilder promptBuilder,
                                  LogChunker chunker,
                                  LogSummarizer summarizer,
@@ -30,9 +35,11 @@ public class OllamaAnalysisService extends AbstractChunkedAIAnalysisProvider {
                                  AIRateLimiter rateLimiter,
                                  AnalysisResultParser responseParser,
                                  LogSpectraAiFacade logSpectraAiFacade,
-                                 AiLogEventMapper aiLogEventMapper) {
+                                 AiLogEventMapper aiLogEventMapper,
+                                 GitHubAgentBridge githubAgentBridge) {
         super(promptBuilder, chunker, summarizer, stackTraceNormalizer, cacheService, rateLimiter, responseParser,
             logSpectraAiFacade, aiLogEventMapper);
+        this.githubAgentBridge = githubAgentBridge;
     }
 
     @Override
@@ -84,6 +91,17 @@ public class OllamaAnalysisService extends AbstractChunkedAIAnalysisProvider {
             throw new AIAnalysisException("Ollama did not return response content");
         }
         return content;
+    }
+
+    @Override
+    protected String callProvider(String model,
+                                  String userPrompt,
+                                  AIAnalysisRequest request,
+                                  AIStreamListener streamListener,
+                                  List<LogDocument> logs) {
+        return githubAgentBridge
+            .tryRun(AIProvider.OLLAMA, model, userPrompt, request, logs, streamListener, DEFAULT_BASE_URL)
+            .orElseGet(() -> callProvider(model, userPrompt, request, streamListener));
     }
 
     @Override

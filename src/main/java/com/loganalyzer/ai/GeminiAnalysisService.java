@@ -1,7 +1,9 @@
 package com.loganalyzer.ai;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.loganalyzer.ai.agent.GitHubAgentBridge;
 import com.loganalyzer.ai.preprocessing.LogChunker;
+import com.loganalyzer.elasticsearch.document.LogDocument;
 import com.loganalyzer.ai.preprocessing.LogSummarizer;
 import com.loganalyzer.ai.preprocessing.StackTraceNormalizer;
 import com.loganalyzer.ai.prompt.PromptBuilder;
@@ -25,6 +27,7 @@ public class GeminiAnalysisService extends AbstractChunkedAIAnalysisProvider {
     private static final String DEFAULT_MODEL = "gemini-2.0-flash";
 
     private final PromptBuilder promptBuilder;
+    private final GitHubAgentBridge githubAgentBridge;
 
     @Value("${ai.gemini.api-key:${GEMINI_API_KEY:${GOOGLE_API_KEY:}}}")
     private String defaultApiKey;
@@ -37,10 +40,12 @@ public class GeminiAnalysisService extends AbstractChunkedAIAnalysisProvider {
                                AIRateLimiter rateLimiter,
                                AnalysisResultParser responseParser,
                                LogSpectraAiFacade logSpectraAiFacade,
-                               AiLogEventMapper aiLogEventMapper) {
+                               AiLogEventMapper aiLogEventMapper,
+                               GitHubAgentBridge githubAgentBridge) {
         super(promptBuilder, chunker, summarizer, stackTraceNormalizer, cacheService, rateLimiter, responseParser,
             logSpectraAiFacade, aiLogEventMapper);
         this.promptBuilder = promptBuilder;
+        this.githubAgentBridge = githubAgentBridge;
     }
 
     @Override
@@ -61,6 +66,17 @@ public class GeminiAnalysisService extends AbstractChunkedAIAnalysisProvider {
     @Override
     protected String callProvider(String model, String userPrompt, AIAnalysisRequest request) {
         return generateContent(model, userPrompt, request, null);
+    }
+
+    @Override
+    protected String callProvider(String model,
+                                  String userPrompt,
+                                  AIAnalysisRequest request,
+                                  AIStreamListener streamListener,
+                                  List<LogDocument> logs) {
+        return githubAgentBridge
+            .tryRun(AIProvider.GEMINI, model, userPrompt, request, logs, streamListener, DEFAULT_BASE_URL)
+            .orElseGet(() -> generateContent(model, userPrompt, request, streamListener));
     }
 
     @Override

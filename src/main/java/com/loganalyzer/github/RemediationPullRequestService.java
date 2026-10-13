@@ -79,14 +79,19 @@ public class RemediationPullRequestService {
             ? analysis.getFingerprint()
             : UUID.randomUUID().toString();
         String shortFp = fingerprint.length() > 8 ? fingerprint.substring(0, 8) : fingerprint;
-        String branch = sanitizeBranch(properties.getPr().getBranchPrefix()
-            + "-" + serviceName
-            + "-" + shortFp
-            + "-" + BRANCH_TS.format(Instant.now()));
+        String branch = resolveRemediationBranch(serviceName, shortFp);
+        boolean reuseBranch = properties.getPr().isReuseBranchPerFingerprint();
 
         try {
-            String baseSha = gitHubGitClient.getDefaultBranchSha(repo, baseBranch);
-            String baseTree = gitHubGitClient.getCommitTreeSha(repo, baseSha);
+            Optional<String> existingTip = reuseBranch
+                ? gitHubGitClient.getBranchTipSha(repo, branch)
+                : Optional.empty();
+            String parentSha = existingTip.orElseGet(() -> gitHubGitClient.getDefaultBranchSha(repo, baseBranch));
+            String baseTree = gitHubGitClient.getCommitTreeSha(repo, parentSha);
+            if (existingTip.isPresent()) {
+                log.debug("operation=createRemediationPr feature=github-app-pr status=entry branch={} action=reuse existingTip={}",
+                    branch, parentSha);
+            }
 
             Map<String, String> filesToCommit = new LinkedHashMap<>();
             List<String> patchedPaths = collectSourcePatches(analysis, filesToCommit);
@@ -108,18 +113,26 @@ public class RemediationPullRequestService {
                 repo,
                 message,
                 treeSha,
-                baseSha,
+                parentSha,
                 properties.getPr().getCommitAuthorName(),
                 properties.getPr().getCommitAuthorEmail()
             );
-            gitHubGitClient.createBranchRef(repo, branch, commitSha);
+            if (existingTip.isPresent()) {
+                gitHubGitClient.updateBranchRef(repo, branch, commitSha);
+            } else {
+                gitHubGitClient.createBranchRef(repo, branch, commitSha);
+            }
 
             String title = "[LogSpectra] " + truncate(
                 StringUtils.hasText(analysis.getErrorSummary()) ? analysis.getErrorSummary() : "Remediation",
                 72
             );
             String prBody = buildPullRequestBody(serviceName, analysis, markdownPath, fingerprint, patchedPaths);
-            Map<String, Object> pr = gitHubGitClient.createPullRequest(repo, title, prBody, branch, baseBranch);
+            Optional<Map<String, Object>> existingPr = reuseBranch
+                ? gitHubGitClient.findOpenPullRequest(repo, branch)
+                : Optional.empty();
+            Map<String, Object> pr = existingPr.orElseGet(() ->
+                gitHubGitClient.createPullRequest(repo, title, prBody, branch, baseBranch));
             Integer number = pr.get("number") instanceof Number n ? n.intValue() : null;
             String htmlUrl = pr.get("html_url") != null ? String.valueOf(pr.get("html_url")) : null;
 
@@ -151,6 +164,16 @@ public class RemediationPullRequestService {
                 serviceName, repo.fullName(), ex.getMessage(), System.currentTimeMillis() - started, ex);
             return Optional.empty();
         }
+    }
+
+    private String resolveRemediationBranch(String serviceName, String shortFp) {
+        String core = sanitizeBranch(properties.getPr().getBranchPrefix()
+            + "-" + serviceName
+            + "-" + shortFp);
+        if (properties.getPr().isReuseBranchPerFingerprint()) {
+            return core;
+        }
+        return sanitizeBranch(core + "-" + BRANCH_TS.format(Instant.now()));
     }
 
     private static List<String> collectSourcePatches(AnalysisResult analysis, Map<String, String> filesToCommit) {

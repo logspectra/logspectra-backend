@@ -2,9 +2,7 @@ package com.loganalyzer.ai;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.loganalyzer.ai.agent.AgentSession;
-import com.loganalyzer.ai.agent.GitHubAgentSessionFactory;
-import com.loganalyzer.ai.agent.OpenAIGitHubAgentLoop;
+import com.loganalyzer.ai.agent.GitHubAgentBridge;
 import com.loganalyzer.ai.preprocessing.LogChunker;
 import com.loganalyzer.ai.preprocessing.LogSummarizer;
 import com.loganalyzer.ai.preprocessing.StackTraceNormalizer;
@@ -22,7 +20,6 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
@@ -39,8 +36,7 @@ public class OpenAIAnalysisService extends AbstractChunkedAIAnalysisProvider {
     private static final HttpClient HTTP_CLIENT = HttpClient.newBuilder().build();
 
     private final PromptBuilder promptBuilder;
-    private final GitHubAgentSessionFactory agentSessionFactory;
-    private final OpenAIGitHubAgentLoop agentLoop;
+    private final GitHubAgentBridge githubAgentBridge;
 
     public OpenAIAnalysisService(PromptBuilder promptBuilder,
                                  LogChunker chunker,
@@ -51,13 +47,11 @@ public class OpenAIAnalysisService extends AbstractChunkedAIAnalysisProvider {
                                  AnalysisResultParser responseParser,
                                  LogSpectraAiFacade logSpectraAiFacade,
                                  AiLogEventMapper aiLogEventMapper,
-                                 GitHubAgentSessionFactory agentSessionFactory,
-                                 OpenAIGitHubAgentLoop agentLoop) {
+                                 GitHubAgentBridge githubAgentBridge) {
         super(promptBuilder, chunker, summarizer, stackTraceNormalizer, cacheService, rateLimiter, responseParser,
             logSpectraAiFacade, aiLogEventMapper);
         this.promptBuilder = promptBuilder;
-        this.agentSessionFactory = agentSessionFactory;
-        this.agentLoop = agentLoop;
+        this.githubAgentBridge = githubAgentBridge;
     }
 
     @Override
@@ -81,21 +75,9 @@ public class OpenAIAnalysisService extends AbstractChunkedAIAnalysisProvider {
                                   AIAnalysisRequest request,
                                   AIStreamListener streamListener,
                                   List<LogDocument> logs) {
-        Optional<AgentSession> session = agentSessionFactory.create(logs);
-        if (session.isPresent()) {
-            String runtimeBaseUrl = StringUtils.hasText(request.resolvedBaseUrl()) ? request.resolvedBaseUrl() : DEFAULT_BASE_URL;
-            String runtimeModel = StringUtils.hasText(request.resolvedModel()) ? request.resolvedModel() : model;
-            String apiKey = request.resolvedApiKey();
-            if (!StringUtils.hasText(apiKey)) {
-                throw new AIAnalysisException("OPENAI requires apiKey");
-            }
-            String response = agentLoop.run(runtimeModel, userPrompt, request, session.get(), runtimeBaseUrl, apiKey);
-            if (streamListener != null && streamListener.isEnabled() && StringUtils.hasText(response)) {
-                streamListener.onToken(response);
-            }
-            return response;
-        }
-        return super.callProvider(model, userPrompt, request, streamListener, logs);
+        return githubAgentBridge
+            .tryRun(AIProvider.OPENAI, model, userPrompt, request, logs, streamListener, DEFAULT_BASE_URL)
+            .orElseGet(() -> super.callProvider(model, userPrompt, request, streamListener, logs));
     }
 
     @Override

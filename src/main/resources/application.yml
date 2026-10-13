@@ -144,6 +144,7 @@ github:
     # When true, every successful analysis that has a registered gitUrl opens a PR
     auto-create-after-analysis: ${GITHUB_PR_AUTO_CREATE:false}
     branch-prefix: logspectra/fix
+    reuse-branch-per-fingerprint: ${GITHUB_PR_REUSE_BRANCH:true}
     commit-author-name: LogSpectra
     commit-author-email: logspectra@users.noreply.github.com
     # Comma-separated GitHub usernames to request review from

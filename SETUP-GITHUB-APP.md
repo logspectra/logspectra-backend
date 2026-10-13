@@ -7,7 +7,7 @@ Analyze (UI / API)
    → AI result
    → Redis code-registry (gitUrl + defaultBranch)
    → GitHub App installation token
-   → create branch logspectra/fix-<service>-<fp>-<ts>
+   → create or update branch logspectra/fix-<service>-<fp> (one branch per issue fingerprint; repeat Debug adds commits to the same branch / open PR)
    → commit .logspectra/remediations/<fp>.md
    → open PR → GitHub Actions CI runs
    → reviewer Approves → you get email → merge
@@ -110,13 +110,15 @@ Author gets email when someone Approves; then merge (or enable **auto-merge** on
 
 ## 7. Iterative GitHub agent (tool loop) + PR
 
-No `git clone` on the server. With **OpenAI** + `github.app.enabled` + registered `gitUrl`:
+No `git clone` on the server. With **any AI provider selected in Settings** (OpenAI, Gemini, Claude, or Ollama when the model supports tools) + `github.app.enabled` + registered `gitUrl`:
 
 ```
 list_repo_files  →  get_file_content(path)  →  (repeat if needed)  →  JSON analysis + newContent
                                                                               ↓
                                                               create branch + commit + PR
 ```
+
+The backend uses the same tool loop for whichever provider is active on the analyze request. If the agent cannot run (App off, no API key, Ollama without tool support), analysis falls back to the normal one-shot prompt.
 
 Config (`application.yml`):
 
@@ -127,7 +129,7 @@ github:
     max-iterations: 8
 ```
 
-Tools (OpenAI function calling):
+Tools (provider-native function calling):
 
 | Tool | Purpose |
 |------|---------|
@@ -140,7 +142,7 @@ PR contents:
 
 - Source patches when the model returns `filePath` + `newContent`
 - Markdown brief under `.logspectra/remediations/<fingerprint>.md`
-- Dynamic branch: `logspectra/fix-<service>-<fp>-<timestamp>`
+- Branch (default): `logspectra/fix-<service>-<fp>` — reused on repeat Debug for the same fingerprint (`github.pr.reuse-branch-per-fingerprint`)
 
 ## 8. Verify
 
