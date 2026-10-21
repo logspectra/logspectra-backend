@@ -24,10 +24,10 @@ public class GitHubAgentToolSupport {
             2) Call get_file_content for the most relevant path(s).
             3) If you need another dependency/file, call get_file_content again.
             4) When you have enough context, stop calling tools and return ONLY the analysis JSON
-               (errorSummary, rootCause, suggestedFixes with filePath + full newContent when patching).
+               (errorSummary, rootCause, suggestedFixes with filePath + search/replace when patching).
 
             Never invent file paths — only use paths returned by list_repo_files or confirmed via get_file_content.
-            Prefer small, correct patches over rewriting unrelated files.
+            Prefer search + replace patches over full newContent rewrites.
             """;
     }
 

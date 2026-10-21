@@ -3,6 +3,7 @@ package com.loganalyzer.ai;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.loganalyzer.ai.agent.GitHubAgentBridge;
+import com.loganalyzer.ai.springai.SpringAiChatGateway;
 import com.loganalyzer.ai.preprocessing.LogChunker;
 import com.loganalyzer.elasticsearch.document.LogDocument;
 import com.loganalyzer.ai.preprocessing.LogSummarizer;
@@ -36,6 +37,7 @@ public class ClaudeAnalysisService extends AbstractChunkedAIAnalysisProvider {
 
     private final PromptBuilder promptBuilder;
     private final GitHubAgentBridge githubAgentBridge;
+    private final SpringAiChatGateway springAiChatGateway;
 
     public ClaudeAnalysisService(PromptBuilder promptBuilder,
                                  LogChunker chunker,
@@ -46,11 +48,13 @@ public class ClaudeAnalysisService extends AbstractChunkedAIAnalysisProvider {
                                  AnalysisResultParser responseParser,
                                  LogSpectraAiFacade logSpectraAiFacade,
                                  AiLogEventMapper aiLogEventMapper,
-                                 GitHubAgentBridge githubAgentBridge) {
+                                 GitHubAgentBridge githubAgentBridge,
+                                 SpringAiChatGateway springAiChatGateway) {
         super(promptBuilder, chunker, summarizer, stackTraceNormalizer, cacheService, rateLimiter, responseParser,
             logSpectraAiFacade, aiLogEventMapper);
         this.promptBuilder = promptBuilder;
         this.githubAgentBridge = githubAgentBridge;
+        this.springAiChatGateway = springAiChatGateway;
     }
 
     @Override
@@ -70,6 +74,12 @@ public class ClaudeAnalysisService extends AbstractChunkedAIAnalysisProvider {
 
     @Override
     protected String callProvider(String model, String userPrompt, AIAnalysisRequest request) {
+        return springAiChatGateway
+            .tryComplete(provider(), model, promptBuilder.getSystemPrompt(), userPrompt, request, AIStreamListener.NO_OP)
+            .orElseGet(() -> callProviderViaRest(model, userPrompt, request));
+    }
+
+    private String callProviderViaRest(String model, String userPrompt, AIAnalysisRequest request) {
         String runtimeModel = StringUtils.hasText(request.resolvedModel()) ? request.resolvedModel() : model;
         String runtimeBaseUrl = StringUtils.hasText(request.resolvedBaseUrl()) ? request.resolvedBaseUrl() : DEFAULT_BASE_URL;
         String runtimeApiKey = request.resolvedApiKey();
@@ -122,10 +132,15 @@ public class ClaudeAnalysisService extends AbstractChunkedAIAnalysisProvider {
 
     @Override
     protected String callProvider(String model, String userPrompt, AIAnalysisRequest request, AIStreamListener streamListener) {
-        if (streamListener == null || !streamListener.isEnabled()) {
-            return callProvider(model, userPrompt, request);
+        if (streamListener != null && streamListener.isEnabled()) {
+            return springAiChatGateway
+                .tryComplete(provider(), model, promptBuilder.getSystemPrompt(), userPrompt, request, streamListener)
+                .orElseGet(() -> callProviderViaRestStream(model, userPrompt, request, streamListener));
         }
+        return callProvider(model, userPrompt, request);
+    }
 
+    private String callProviderViaRestStream(String model, String userPrompt, AIAnalysisRequest request, AIStreamListener streamListener) {
         String runtimeModel = StringUtils.hasText(request.resolvedModel()) ? request.resolvedModel() : model;
         String runtimeBaseUrl = StringUtils.hasText(request.resolvedBaseUrl()) ? request.resolvedBaseUrl() : DEFAULT_BASE_URL;
         String runtimeApiKey = request.resolvedApiKey();

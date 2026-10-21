@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
+import com.loganalyzer.ai.patch.SearchReplacePatchApplier;
 import com.loganalyzer.domain.model.AnalysisResult;
 import com.loganalyzer.domain.model.SuggestedFix;
 import com.loganalyzer.service.ServiceCodeRegistryService;
@@ -25,6 +26,8 @@ class RemediationPullRequestServiceTest {
     private GitHubGitClient gitHubGitClient;
     @Mock
     private ServiceCodeRegistryService codeRegistryService;
+    @Mock
+    private GitWorkspaceService gitWorkspaceService;
 
     private GitHubAppProperties properties;
     private RemediationPullRequestService service;
@@ -37,7 +40,9 @@ class RemediationPullRequestServiceTest {
         properties.getPr().setBranchPrefix("logspectra/fix");
         properties.getPr().setCommitAuthorName("LogSpectra");
         properties.getPr().setCommitAuthorEmail("logspectra@users.noreply.github.com");
-        service = new RemediationPullRequestService(properties, gitHubGitClient, codeRegistryService);
+        properties.getWorkspace().setEnabled(false);
+        service = new RemediationPullRequestService(
+            properties, gitHubGitClient, codeRegistryService, new SearchReplacePatchApplier(), gitWorkspaceService);
     }
 
     @Test
@@ -92,7 +97,7 @@ class RemediationPullRequestServiceTest {
         assertEquals("logspectra/fix-gateway-service-abcdef12", result.get().getBranch());
         verify(gitHubGitClient).createBranchRef(any(), eq("logspectra/fix-gateway-service-abcdef12"), eq("commit-sha"));
         verify(gitHubGitClient, never()).updateBranchRef(any(), anyString(), anyString());
-        verify(gitHubGitClient, times(2)).createBlob(any(), anyString());
+        verify(gitHubGitClient, times(1)).createBlob(any(), anyString());
         verify(gitHubGitClient).createTree(any(), eq("tree-sha"), anyList());
     }
 
@@ -120,6 +125,10 @@ class RemediationPullRequestServiceTest {
             .fingerprint("abcdef123456")
             .errorSummary("Still failing")
             .rootCause("Same bug")
+            .suggestedFixes(List.of(SuggestedFix.builder()
+                .filePath("src/main/java/com/example/Checkout.java")
+                .newContent("class Checkout { /* patched */ }")
+                .build()))
             .build();
 
         Optional<RemediationPullRequestResult> result =
@@ -142,5 +151,51 @@ class RemediationPullRequestServiceTest {
             projectId, "gateway-service", AnalysisResult.builder().fingerprint("x").build());
         assertTrue(result.isEmpty());
         verifyNoInteractions(gitHubGitClient);
+    }
+
+    @Test
+    void createForAnalysisAppliesSearchReplacePatch() {
+        UUID projectId = UUID.randomUUID();
+        when(codeRegistryService.find(eq(projectId.toString()), eq("gateway-service")))
+            .thenReturn(Optional.of(ServiceSourceMapping.builder()
+                .serviceName("gateway-service")
+                .gitUrl("https://github.com/acme/gateway-service.git")
+                .defaultBranch("main")
+                .build()));
+
+        when(gitHubGitClient.getBranchTipSha(any(), anyString())).thenReturn(Optional.empty());
+        when(gitHubGitClient.getDefaultBranchSha(any(), eq("main"))).thenReturn("base-sha");
+        when(gitHubGitClient.getCommitTreeSha(any(), eq("base-sha"))).thenReturn("tree-sha");
+        when(gitHubGitClient.getFileContent(any(), eq("src/Checkout.java"), eq("main")))
+            .thenReturn(Optional.of("class Checkout {\n  int x() { return 10 / n; }\n}\n"));
+        when(gitHubGitClient.findOpenPullRequest(any(), anyString())).thenReturn(Optional.empty());
+        when(gitHubGitClient.createBlob(any(), anyString())).thenReturn("blob-sha");
+        when(gitHubGitClient.createTree(any(), eq("tree-sha"), anyList())).thenReturn("new-tree");
+        when(gitHubGitClient.createCommit(any(), anyString(), eq("new-tree"), eq("base-sha"), anyString(), anyString()))
+            .thenReturn("commit-sha");
+        when(gitHubGitClient.createPullRequest(any(), anyString(), anyString(), anyString(), eq("main")))
+            .thenReturn(Map.of("number", 9, "html_url", "https://github.com/acme/gateway-service/pull/9"));
+
+        AnalysisResult analysis = AnalysisResult.builder()
+            .fingerprint("patchfp01")
+            .errorSummary("div zero")
+            .rootCause("n==0")
+            .suggestedFixes(List.of(SuggestedFix.builder()
+                .fix("Guard divide")
+                .priority("HIGH")
+                .effort("LOW")
+                .filePath("src/Checkout.java")
+                .search("return 10 / n;")
+                .replace("if (n == 0) return 0; return 10 / n;")
+                .build()))
+            .build();
+
+        Optional<RemediationPullRequestResult> result =
+            service.createForAnalysis(projectId, "gateway-service", analysis);
+
+        assertTrue(result.isPresent());
+        verify(gitHubGitClient).getFileContent(any(), eq("src/Checkout.java"), eq("main"));
+        verify(gitHubGitClient, times(1)).createBlob(any(), anyString());
+        verify(gitHubGitClient).createBlob(any(), contains("if (n == 0) return 0;"));
     }
 }

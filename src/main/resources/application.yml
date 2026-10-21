@@ -65,6 +65,8 @@ kafka:
 ai:
   provider: ${AI_PROVIDER:ollama}
   default-provider: ${AI_DEFAULT_PROVIDER:OLLAMA}
+  spring-ai:
+    enabled: ${AI_SPRING_AI_ENABLED:true}
   openai:
     base-url: ${AI_OPENAI_BASE_URL:https://api.openai.com}
     api-key: ${AI_OPENAI_API_KEY:${OPENAI_API_KEY:}}
@@ -86,6 +88,9 @@ ai:
 # Preferred: client services register git-url via starter → Redis.
 # YAML below is only a fallback for local-path on the backend host.
 logspectra:
+  analysis:
+    # GitHub agent + cloud models can exceed 2m; UI holds the fetch open until complete/timeout
+    sse-timeout-ms: ${LOGSPECTRA_ANALYZE_SSE_TIMEOUT_MS:600000}
   ai:
     enabled: true
     registry:
@@ -94,9 +99,11 @@ logspectra:
     code-context:
       enabled: true
       # local | git | github — with github.app.enabled, RemoteSourceReader cascades to Contents API (no clone)
+      # Approach 2: stack-trace parse → load only those files (full file if ≤ max-file-chars)
       provider: local
-      max-snippets: 8
-      context-lines: 20
+      max-snippets: 4
+      context-lines: 30
+      max-file-chars: ${LOGSPECTRA_CODE_CONTEXT_MAX_FILE_CHARS:40000}
       services: {}
 
 app:
@@ -132,26 +139,31 @@ security:
 # Setup: see SETUP-GITHUB-APP.md. No MCP required for runtime.
 github:
   app:
-    enabled: ${GITHUB_APP_ENABLED:false}
-    app-id: ${GITHUB_APP_ID:}
-    installation-id: ${GITHUB_APP_INSTALLATION_ID:}
+    enabled: ${GITHUB_APP_ENABLED:true}
+    app-id: ${GITHUB_APP_ID:5296170}
+    installation-id: ${GITHUB_APP_INSTALLATION_ID:170859742}
     # Prefer file path locally; in K8s use a secret mounted as PEM or GITHUB_APP_PRIVATE_KEY
-    private-key-path: ${GITHUB_APP_PRIVATE_KEY_PATH:}
+    private-key-path: ${GITHUB_APP_PRIVATE_KEY_PATH:/Users/vipinv15.vc/Developer/project/secrets/logspectra-demo.2026-10-12.private-key.pem}
     private-key: ${GITHUB_APP_PRIVATE_KEY:}
     api-base-url: ${GITHUB_API_BASE_URL:https://api.github.com}
   pr:
     enabled: ${GITHUB_PR_ENABLED:true}
     # When true, every successful analysis that has a registered gitUrl opens a PR
-    auto-create-after-analysis: ${GITHUB_PR_AUTO_CREATE:false}
+    auto-create-after-analysis: ${GITHUB_PR_AUTO_CREATE:true}
     branch-prefix: logspectra/fix
     reuse-branch-per-fingerprint: ${GITHUB_PR_REUSE_BRANCH:true}
     commit-author-name: LogSpectra
     commit-author-email: logspectra@users.noreply.github.com
     # Comma-separated GitHub usernames to request review from
-    reviewers: ${GITHUB_PR_REVIEWERS:}
-  # Iterative tool loop (OpenAI): list_repo_files → get_file_content* → JSON patch
+    reviewers: ${GITHUB_PR_REVIEWERS:kmvipin,logspectra}
+  workspace:
+    enabled: ${GITHUB_WORKSPACE_ENABLED:true}
+    root: ${LOGSPECTRA_CODE_REGISTRY_ROOT:${user.home}/logspectra/code-registry}
+    clone-depth: ${GITHUB_WORKSPACE_CLONE_DEPTH:1}
+    command-timeout-seconds: ${GITHUB_WORKSPACE_GIT_TIMEOUT_SECONDS:120}
+  # Expensive multi-turn tool loop — OFF by default (prefer stack-trace + search/replace)
   agent:
-    tool-calling-enabled: ${GITHUB_AGENT_TOOL_CALLING:true}
+    tool-calling-enabled: ${GITHUB_AGENT_TOOL_CALLING:false}
     max-iterations: ${GITHUB_AGENT_MAX_ITERATIONS:8}
     max-tree-entries: 400
     max-file-chars: 60000

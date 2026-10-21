@@ -21,7 +21,6 @@ import com.loganalyzer.domain.repository.AnalysisHistoryRepository;
 import com.loganalyzer.domain.repository.IssueGroupRepository;
 import com.loganalyzer.elasticsearch.document.LogDocument;
 import com.loganalyzer.elasticsearch.repository.LogElasticsearchRepository;
-import com.loganalyzer.github.RemediationPullRequestService;
 import com.loganalyzer.infrastructure.exception.ResourceNotFoundException;
 
 import java.io.IOException;
@@ -60,9 +59,6 @@ class LogAnalysisServiceTest {
 
     @Mock
     private IssueGroupRepository issueGroupRepository;
-
-    @Mock
-    private RemediationPullRequestService remediationPullRequestService;
 
     @InjectMocks
     private LogAnalysisService logAnalysisService;
@@ -141,8 +137,6 @@ class LogAnalysisServiceTest {
             .thenReturn(AnalysisHistory.builder().fingerprint("fp-123").build());
         when(issueGroupRepository.findByProjectIdAndFingerprint(projectId, "fp-123"))
             .thenReturn(Optional.empty());
-        when(remediationPullRequestService.shouldCreate(false)).thenReturn(false);
-
         CompletableFuture<AnalysisResultResponse> result = logAnalysisService.analyze(analyzeRequest, projectId, streamListener);
 
         assertNotNull(result);
@@ -181,8 +175,6 @@ class LogAnalysisServiceTest {
             .thenReturn(AnalysisHistory.builder().fingerprint("fp-123").build());
         when(issueGroupRepository.findByProjectIdAndFingerprint(projectId, "fp-123"))
             .thenReturn(Optional.empty());
-        when(remediationPullRequestService.shouldCreate(false)).thenReturn(false);
-
         CompletableFuture<AnalysisResultResponse> result = logAnalysisService.analyze(analyzeRequest, projectId, streamListener);
         result.get();
 
@@ -234,8 +226,6 @@ class LogAnalysisServiceTest {
             .thenReturn(AnalysisHistory.builder().fingerprint("fp-123").build());
         when(issueGroupRepository.findByProjectIdAndFingerprint(projectId, "fp-123"))
             .thenReturn(Optional.of(existingIssue));
-        when(remediationPullRequestService.shouldCreate(false)).thenReturn(false);
-
         CompletableFuture<AnalysisResultResponse> result = logAnalysisService.analyze(analyzeRequest, projectId, streamListener);
         result.get();
 

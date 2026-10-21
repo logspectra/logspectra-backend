@@ -29,6 +29,8 @@ public class AnalysisResultParser {
                     .priority(item.path("priority").asText())
                     .effort(item.path("effort").asText())
                     .filePath(textOrNull(item, "filePath"))
+                    .search(textOrNull(item, "search"))
+                    .replace(textOrNull(item, "replace"))
                     .newContent(textOrNull(item, "newContent"))
                     .build()));
             }

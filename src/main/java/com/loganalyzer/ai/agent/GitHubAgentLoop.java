@@ -410,11 +410,17 @@ public class GitHubAgentLoop {
         if (StringUtils.hasText(anthropicVersion)) {
             spec = spec.header("anthropic-version", anthropicVersion);
         }
-        JsonNode body = spec.body(payload).retrieve().body(JsonNode.class);
-        if (body == null) {
-            throw new AIAnalysisException("Agent provider returned empty response for " + path);
+        try {
+            JsonNode body = spec.body(payload).retrieve().body(JsonNode.class);
+            if (body == null) {
+                throw new AIAnalysisException("Agent provider returned empty response for " + path);
+            }
+            return body;
+        } catch (AIAnalysisException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            throw new AIAnalysisException("Agent provider call failed for " + path + ": " + ex.getMessage(), ex);
         }
-        return body;
     }
 
     private static String extractClaudeText(JsonNode body) {

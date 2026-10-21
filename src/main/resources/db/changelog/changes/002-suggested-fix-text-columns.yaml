@@ -1,0 +1,15 @@
+databaseChangeLog:
+  - changeSet:
+      id: 002-suggested-fix-text-columns
+      author: logspectra
+      preConditions:
+        - onFail: MARK_RAN
+        - tableExists:
+            tableName: issue_group_suggested_fixes
+      changes:
+        - sql:
+            sql: |
+              ALTER TABLE issue_group_suggested_fixes ALTER COLUMN fix TYPE TEXT;
+              ALTER TABLE issue_group_suggested_fixes ALTER COLUMN search TYPE TEXT;
+              ALTER TABLE issue_group_suggested_fixes ALTER COLUMN "replace" TYPE TEXT;
+              ALTER TABLE issue_group_suggested_fixes ALTER COLUMN new_content TYPE TEXT;

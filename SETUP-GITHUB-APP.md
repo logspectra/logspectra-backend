@@ -108,41 +108,45 @@ On each **service** repo:
 
 Author gets email when someone Approves; then merge (or enable **auto-merge** on the PR).
 
-## 7. Iterative GitHub agent (tool loop) + PR
+## 7. Stack-trace scoped fix + search/replace PR (default)
 
-No `git clone` on the server. With **any AI provider selected in Settings** (OpenAI, Gemini, Claude, or Ollama when the model supports tools) + `github.app.enabled` + registered `gitUrl`:
+Default path is **cheap and single-shot** (no full-repo tool loop):
 
 ```
-list_repo_files  →  get_file_content(path)  →  (repeat if needed)  →  JSON analysis + newContent
-                                                                              ↓
-                                                              create branch + commit + PR
+stack-trace parse → load only failing file(s) from GitHub Contents or local-path
+                 → one LLM call → JSON with filePath + search/replace
+                 → apply patch → create branch + commit + PR
 ```
 
-The backend uses the same tool loop for whichever provider is active on the analyze request. If the agent cannot run (App off, no API key, Ollama without tool support), analysis falls back to the normal one-shot prompt.
+- **Approach 2:** Java regex parses `at com.foo.Bar.method(Bar.java:42)` and reads those files only (`logspectra.ai.code-context`).
+- **Approach 3:** Model returns `search` + `replace` (not the whole file). Backend applies the patch, then commits.
 
-Config (`application.yml`):
+### Git workspace (default: `github.workspace.enabled=true`)
+
+Clones on the backend host at:
+
+`{LOGSPECTRA_CODE_REGISTRY_ROOT}/{projectId}/{service}/` (default root: `~/logspectra/code-registry`)
+
+Requires **`git` on PATH** and GitHub App token for `clone`/`push`. On register or analyze, syncs `defaultBranch`; remediation uses `git commit` + `git push`, then opens/reuses the PR via REST. Set `GITHUB_WORKSPACE_ENABLED=false` to fall back to Git Data API only (no disk).
+
+Optional manual `localPath` in registry when workspace is disabled.
+
+### Optional: iterative tool loop (expensive)
+
+Set `GITHUB_AGENT_TOOL_CALLING=true` only if logs lack stack frames. That enables multi-turn `list_repo_files` / `get_file_content` (high RAM/tokens).
 
 ```yaml
 github:
   agent:
-    tool-calling-enabled: true
+    tool-calling-enabled: false   # default
     max-iterations: 8
 ```
 
-Tools (provider-native function calling):
-
-| Tool | Purpose |
-|------|---------|
-| `list_repo_files` | Recursive tree (optional `pathPrefix` / `query`) |
-| `get_file_content` | Fetch exact path into RAM |
-
-This is **iterative refinement**, not ML self-training — each analysis re-discovers files from the live repo.
-
 PR contents:
 
-- Source patches when the model returns `filePath` + `newContent`
+- Source patches from `search`/`replace` (preferred) or `newContent` (fallback)
 - Markdown brief under `.logspectra/remediations/<fingerprint>.md`
-- Branch (default): `logspectra/fix-<service>-<fp>` — reused on repeat Debug for the same fingerprint (`github.pr.reuse-branch-per-fingerprint`)
+- Branch (default): `logspectra/fix-<service>-<fp>` — reused on repeat Debug (`github.pr.reuse-branch-per-fingerprint`)
 
 ## 8. Verify
 

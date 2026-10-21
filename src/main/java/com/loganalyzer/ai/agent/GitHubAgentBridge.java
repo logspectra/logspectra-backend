@@ -59,7 +59,7 @@ public class GitHubAgentBridge {
                 streamListener.onToken(response);
             }
             return Optional.of(response);
-        } catch (AIAnalysisException ex) {
+        } catch (Exception ex) {
             log.warn("operation=agentLoop feature=github-agent status=error provider={} error={} fallback=oneShot",
                 provider, ex.getMessage());
             return Optional.empty();
