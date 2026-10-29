@@ -6,6 +6,6 @@ import lombok.Data;
 
 @Data
 @Builder
-public class ErrorResolutionResponse {
-    private List<ErrorResolutionPointResponse> points;
+public class ErrorTriageResponse {
+    private List<ErrorTriagePointResponse> points;
 }

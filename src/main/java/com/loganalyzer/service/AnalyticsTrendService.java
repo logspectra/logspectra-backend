@@ -6,8 +6,8 @@ import co.elastic.clients.elasticsearch._types.aggregations.StringTermsBucket;
 import co.elastic.clients.elasticsearch.core.SearchResponse;
 import com.loganalyzer.api.dto.response.AiUsagePointResponse;
 import com.loganalyzer.api.dto.response.AiUsageResponse;
-import com.loganalyzer.api.dto.response.ErrorResolutionPointResponse;
-import com.loganalyzer.api.dto.response.ErrorResolutionResponse;
+import com.loganalyzer.api.dto.response.ErrorTriagePointResponse;
+import com.loganalyzer.api.dto.response.ErrorTriageResponse;
 import com.loganalyzer.api.dto.response.IngestionRatePointResponse;
 import com.loganalyzer.api.dto.response.IngestionRateResponse;
 import com.loganalyzer.api.dto.response.SeverityMixPointResponse;
@@ -20,6 +20,7 @@ import com.loganalyzer.domain.repository.AnalysisHistoryRepository;
 import com.loganalyzer.elasticsearch.repository.LogElasticsearchRepository;
 import java.io.IOException;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -71,7 +72,7 @@ public class AnalyticsTrendService {
         }
     }
 
-    public ErrorResolutionResponse getErrorResolution(UUID projectId, Instant from, Instant to) {
+    public ErrorTriageResponse getErrorTriage(UUID projectId, Instant from, Instant to) {
         Instant effectiveTo = to == null ? utcNow() : to;
         Instant effectiveFrom = from == null
             ? effectiveTo.minus(DEFAULT_HOURS, ChronoUnit.HOURS)
@@ -80,38 +81,67 @@ public class AnalyticsTrendService {
             throw new IllegalArgumentException("'from' must be before 'to'");
         }
 
-        Map<Integer, Long> buckets = new LinkedHashMap<>();
-        for (int hour = 0; hour < 24; hour++) {
-            buckets.put(hour, 0L);
-        }
-
+        List<ErrorTriagePointResponse> points = new ArrayList<>();
         try {
-            SearchResponse<Void> response = logRepository.errorResolution(effectiveFrom, effectiveTo, projectId.toString());
-            if (response.aggregations() != null
-                && response.aggregations().get("by_resolved_hour") != null
-                && response.aggregations().get("by_resolved_hour").dateHistogram() != null
-                && response.aggregations().get("by_resolved_hour").dateHistogram().buckets() != null
-                && response.aggregations().get("by_resolved_hour").dateHistogram().buckets().array() != null) {
-                for (DateHistogramBucket bucket : response.aggregations().get("by_resolved_hour").dateHistogram().buckets().array()) {
-                    Instant bucketTime = Instant.ofEpochMilli(bucket.key());
-                    int hour = bucketTime.atZone(ZoneOffset.UTC).getHour();
-                    buckets.put(hour, buckets.getOrDefault(hour, 0L) + bucket.docCount());
-                }
-            }
+            SearchResponse<Void> response = logRepository.errorTriageTrend(
+                effectiveFrom, effectiveTo, projectId.toString());
+            points = extractErrorTriagePoints(response, effectiveFrom, effectiveTo);
         } catch (IOException ignored) {
-            // Return zero-filled points when Elasticsearch is unavailable.
+            // Return empty points when Elasticsearch is unavailable.
         }
 
-        List<ErrorResolutionPointResponse> points = buckets.entrySet().stream()
-            .map(entry -> ErrorResolutionPointResponse.builder()
-                .hour(entry.getKey())
-                .value(entry.getValue())
-                .build())
-            .toList();
-
-        return ErrorResolutionResponse.builder()
+        return ErrorTriageResponse.builder()
             .points(points)
             .build();
+    }
+
+    private List<ErrorTriagePointResponse> extractErrorTriagePoints(
+        SearchResponse<Void> response,
+        Instant rangeFrom,
+        Instant rangeTo
+    ) {
+        if (response == null
+            || response.aggregations() == null
+            || response.aggregations().get("over_time") == null
+            || response.aggregations().get("over_time").dateHistogram() == null
+            || response.aggregations().get("over_time").dateHistogram().buckets() == null
+            || response.aggregations().get("over_time").dateHistogram().buckets().array() == null) {
+            return List.of();
+        }
+
+        DateTimeFormatter labelFormatter = triagePeriodLabelFormatter(rangeFrom, rangeTo);
+        List<ErrorTriagePointResponse> points = new ArrayList<>();
+        for (DateHistogramBucket bucket : response.aggregations().get("over_time").dateHistogram().buckets().array()) {
+            long openCount = filterAggDocCount(bucket, "open");
+            long resolvedCount = filterAggDocCount(bucket, "resolved");
+            Instant bucketTime = Instant.ofEpochMilli(bucket.key());
+            String periodLabel = labelFormatter.format(bucketTime);
+            points.add(ErrorTriagePointResponse.builder()
+                .periodLabel(periodLabel)
+                .openCount(openCount)
+                .resolvedCount(resolvedCount)
+                .build());
+        }
+        return points;
+    }
+
+    private long filterAggDocCount(DateHistogramBucket bucket, String aggName) {
+        if (bucket.aggregations() == null || bucket.aggregations().get(aggName) == null) {
+            return 0L;
+        }
+        Aggregate aggregate = bucket.aggregations().get(aggName);
+        if (aggregate.filter() == null) {
+            return 0L;
+        }
+        return aggregate.filter().docCount();
+    }
+
+    private DateTimeFormatter triagePeriodLabelFormatter(Instant from, Instant to) {
+        long hours = Math.max(1, Duration.between(from, to).toHours());
+        if (hours <= 24) {
+            return HOUR_LABEL_FORMATTER.withZone(ZoneOffset.UTC);
+        }
+        return DateTimeFormatter.ofPattern("MMM d HH:mm").withZone(ZoneOffset.UTC);
     }
 
     public IngestionRateResponse getIngestionRate(UUID projectId, Instant from, Instant to) {
