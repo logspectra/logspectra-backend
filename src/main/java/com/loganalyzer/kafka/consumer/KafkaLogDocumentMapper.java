@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.loganalyzer.elasticsearch.document.LogDocument;
 import java.time.Instant;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -15,6 +17,8 @@ import org.springframework.util.StringUtils;
 @Component
 @RequiredArgsConstructor
 public class KafkaLogDocumentMapper {
+
+    private static final Pattern ROUTE_IN_MESSAGE = Pattern.compile("(?:^|\\s)route=([^\\s]+)");
 
     private final ObjectMapper objectMapper;
 
@@ -72,6 +76,9 @@ public class KafkaLogDocumentMapper {
             document.setEndpoint(firstText(root.path("mdc"), "endpoint"));
             if (!StringUtils.hasText(document.getEndpoint())) {
                 document.setEndpoint(firstText(root, "endpoint"));
+            }
+            if (!StringUtils.hasText(document.getEndpoint())) {
+                document.setEndpoint(extractRouteFromMessage(document.getMessage()));
             }
         }
 
@@ -135,6 +142,18 @@ public class KafkaLogDocumentMapper {
                     return text;
                 }
             }
+        }
+        return null;
+    }
+
+    static String extractRouteFromMessage(String message) {
+        if (!StringUtils.hasText(message)) {
+            return null;
+        }
+        Matcher matcher = ROUTE_IN_MESSAGE.matcher(message);
+        if (matcher.find()) {
+            String route = matcher.group(1).trim();
+            return StringUtils.hasText(route) ? route : null;
         }
         return null;
     }

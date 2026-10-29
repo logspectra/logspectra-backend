@@ -29,6 +29,7 @@ public class LogMapper {
             .thread(document.getThread())
             .logger(document.getLogger())
             .message(document.getMessage())
+            .endpoint(document.getEndpoint())
             .exception(document.getException())
             .stackTrace(document.getStackTrace())
             .host(document.getHost())
