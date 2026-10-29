@@ -18,9 +18,9 @@ public class AnalysisResultParser {
         this.objectMapper = objectMapper;
     }
 
-    public AnalysisResult parse(String json) {
+    public AnalysisResult parse(String raw) {
         try {
-            JsonNode node = objectMapper.readTree(json);
+            JsonNode node = objectMapper.readTree(extractJsonObject(raw));
             List<SuggestedFix> fixes = new ArrayList<>();
             JsonNode suggestedFixes = node.path("suggestedFixes");
             if (suggestedFixes.isArray()) {
@@ -46,7 +46,7 @@ public class AnalysisResultParser {
                 .build();
         } catch (JsonProcessingException ex) {
             return AnalysisResult.builder()
-                .errorSummary(json.substring(0, Math.min(500, json.length())))
+                .errorSummary(raw.substring(0, Math.min(500, raw.length())))
                 .rootCause("Unable to parse structured AI output")
                 .severity("LOW")
                 .confidence(0.0)
@@ -60,6 +60,29 @@ public class AnalysisResultParser {
             node.forEach(item -> values.add(item.asText()));
         }
         return values;
+    }
+
+    static String extractJsonObject(String raw) {
+        if (raw == null) {
+            return "{}";
+        }
+        String trimmed = raw.trim();
+        if (trimmed.startsWith("```")) {
+            int firstNewline = trimmed.indexOf('\n');
+            if (firstNewline > 0) {
+                trimmed = trimmed.substring(firstNewline + 1);
+            }
+            int fence = trimmed.lastIndexOf("```");
+            if (fence > 0) {
+                trimmed = trimmed.substring(0, fence).trim();
+            }
+        }
+        int start = trimmed.indexOf('{');
+        int end = trimmed.lastIndexOf('}');
+        if (start >= 0 && end > start) {
+            return trimmed.substring(start, end + 1);
+        }
+        return trimmed;
     }
 
     private static String textOrNull(JsonNode item, String field) {

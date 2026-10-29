@@ -39,11 +39,12 @@ public class GeminiAnalysisService extends AbstractChunkedAIAnalysisProvider {
                                CacheService cacheService,
                                AIRateLimiter rateLimiter,
                                AnalysisResultParser responseParser,
+                               AnalysisConfidenceScorer confidenceScorer,
                                LogSpectraAiFacade logSpectraAiFacade,
                                AiLogEventMapper aiLogEventMapper,
                                GitHubAgentBridge githubAgentBridge) {
         super(promptBuilder, chunker, summarizer, stackTraceNormalizer, cacheService, rateLimiter, responseParser,
-            logSpectraAiFacade, aiLogEventMapper);
+            confidenceScorer, logSpectraAiFacade, aiLogEventMapper);
         this.promptBuilder = promptBuilder;
         this.githubAgentBridge = githubAgentBridge;
     }

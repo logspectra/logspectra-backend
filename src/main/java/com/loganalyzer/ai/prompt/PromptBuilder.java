@@ -41,8 +41,11 @@ public class PromptBuilder {
                 }
               ],
               "relatedTraceIds": ["traceId1"],
-              "confidence": 0.0
+              "confidence": 0.72
             }
+
+            Set "confidence" to a number between 0.0 and 1.0 (not 0–100): your subjective certainty that the
+            root cause and fixes match the logs (e.g. 0.85 = strong stack-trace match, 0.45 = plausible but sparse logs).
 
             When codebase context is provided: for at least one high-confidence fix return
             filePath + search + replace (exact text from the provided source, without line-number prefixes).
