@@ -17,8 +17,6 @@ import com.loganalyzer.domain.repository.AnalysisHistoryRepository;
 import com.loganalyzer.domain.repository.IssueGroupRepository;
 import com.loganalyzer.elasticsearch.document.LogDocument;
 import com.loganalyzer.elasticsearch.repository.LogElasticsearchRepository;
-import com.loganalyzer.github.RemediationPullRequestResult;
-import com.loganalyzer.github.RemediationPullRequestService;
 import com.loganalyzer.infrastructure.exception.ResourceNotFoundException;
 import java.io.IOException;
 import java.time.Instant;
@@ -45,7 +43,6 @@ public class LogAnalysisService {
     private final AISettingsService aiSettingsService;
     private final AnalysisHistoryRepository analysisHistoryRepository;
     private final IssueGroupRepository issueGroupRepository;
-    private final RemediationPullRequestService remediationPullRequestService;
 
     @Async("aiExecutor")
     public CompletableFuture<AnalysisResultResponse> analyze(AnalyzeRequest request,
@@ -70,16 +67,6 @@ public class LogAnalysisService {
         analysisHistoryRepository.save(history);
 
         AnalysisResultResponse response = logMapper.toResponse(result);
-        boolean wantPr = Boolean.TRUE.equals(request.getCreateRemediationPr());
-        if (remediationPullRequestService.shouldCreate(wantPr)) {
-            Optional<RemediationPullRequestResult> pr =
-                remediationPullRequestService.createForAnalysis(projectId, service, result);
-            pr.ifPresent(created -> {
-                response.setRemediationPrUrl(created.getPullRequestUrl());
-                response.setRemediationBranch(created.getBranch());
-                response.setRemediationPrNumber(created.getPullRequestNumber());
-            });
-        }
         return CompletableFuture.completedFuture(response);
     }
 

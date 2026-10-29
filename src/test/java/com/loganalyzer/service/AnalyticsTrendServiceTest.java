@@ -5,7 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.when;
 import com.loganalyzer.api.dto.response.AiUsageResponse;
-import com.loganalyzer.api.dto.response.ErrorResolutionResponse;
+import com.loganalyzer.api.dto.response.ErrorTriageResponse;
 import com.loganalyzer.api.dto.response.IngestionRateResponse;
 import com.loganalyzer.api.dto.response.SeverityMixResponse;
 import com.loganalyzer.api.dto.response.TopEndpointResponse;
@@ -184,35 +184,29 @@ class AnalyticsTrendServiceTest {
     }
 
     @Test
-    void shouldReturnZeroFilledErrorResolutionWhenAggregationFails() throws Exception {
+    void shouldReturnEmptyErrorTriageWhenAggregationFails() throws Exception {
         UUID projectId = UUID.randomUUID();
         Instant from = Instant.parse("2026-03-28T00:00:00Z");
         Instant to = Instant.parse("2026-03-28T01:00:00Z");
-        when(logRepository.errorResolution(
+        when(logRepository.errorTriageTrend(
             org.mockito.ArgumentMatchers.any(),
             org.mockito.ArgumentMatchers.any(),
             org.mockito.ArgumentMatchers.eq(projectId.toString())))
             .thenThrow(new IOException("ES unavailable"));
 
-        ErrorResolutionResponse response = analyticsTrendService.getErrorResolution(projectId, from, to);
+        ErrorTriageResponse response = analyticsTrendService.getErrorTriage(projectId, from, to);
 
-        assertEquals(24, response.getPoints().size());
-        assertEquals(0, response.getPoints().getFirst().getHour());
-        assertEquals(0L, response.getPoints().getFirst().getValue());
-        assertEquals(1, response.getPoints().get(1).getHour());
-        assertEquals(0L, response.getPoints().get(1).getValue());
-        assertEquals(23, response.getPoints().get(23).getHour());
-        assertEquals(0L, response.getPoints().get(23).getValue());
+        assertTrue(response.getPoints().isEmpty());
     }
 
     @Test
-    void shouldRejectInvalidErrorResolutionRange() {
+    void shouldRejectInvalidErrorTriageRange() {
         UUID projectId = UUID.randomUUID();
         Instant from = Instant.parse("2026-03-28T02:00:00Z");
         Instant to = Instant.parse("2026-03-28T01:00:00Z");
 
         IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
-            () -> analyticsTrendService.getErrorResolution(projectId, from, to));
+            () -> analyticsTrendService.getErrorTriage(projectId, from, to));
 
         assertTrue(ex.getMessage().contains("from"));
     }

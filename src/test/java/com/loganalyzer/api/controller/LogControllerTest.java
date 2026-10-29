@@ -48,6 +48,8 @@ class LogControllerTest {
 
         when(projectAccessService.resolveUserId(principal, null)).thenReturn(userId);
         when(projectAccessService.resolveProjectId(userId, null, projectId.toString())).thenReturn(projectId);
+        when(logAnalysisStreamingService.streamAnalysis(eq(analyzeRequest), eq(projectId)))
+            .thenReturn(new SseEmitter(60_000L));
 
         SseEmitter emitter = logAnalysisController.analyze(analyzeRequest, principal, null, null, projectId.toString());
 
@@ -55,7 +57,7 @@ class LogControllerTest {
         verify(projectAccessService).resolveUserId(principal, null);
         verify(projectAccessService).resolveProjectId(userId, null, projectId.toString());
         verify(projectAccessService).validateAccess(userId, projectId);
-        verify(logAnalysisStreamingService).streamAnalysis(eq(analyzeRequest), eq(projectId), any(SseEmitter.class));
+        verify(logAnalysisStreamingService).streamAnalysis(eq(analyzeRequest), eq(projectId));
     }
 }
 

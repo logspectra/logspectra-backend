@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.loganalyzer.api.dto.request.ServiceCodeRegistryRequest;
 import com.loganalyzer.api.dto.response.ServiceCodeRegistryResponse;
+import com.loganalyzer.github.GitWorkspaceService;
 import com.logspectra.ai.model.ServiceSourceMapping;
 import java.time.Duration;
 import java.time.Instant;
@@ -25,6 +26,7 @@ public class ServiceCodeRegistryService {
 
     private final StringRedisTemplate stringRedisTemplate;
     private final ObjectMapper objectMapper;
+    private final GitWorkspaceService gitWorkspaceService;
 
     public ServiceCodeRegistryResponse register(ServiceCodeRegistryRequest request) {
         if (!StringUtils.hasText(request.getGitUrl()) && !StringUtils.hasText(request.getLocalPath())) {
@@ -53,6 +55,17 @@ public class ServiceCodeRegistryService {
                 stored.projectId(), stored.serviceName(), stored.gitUrl(), key);
         } catch (JsonProcessingException ex) {
             throw new IllegalStateException("Failed to serialize code registry payload", ex);
+        }
+
+        if (gitWorkspaceService.isActive() && StringUtils.hasText(stored.gitUrl())) {
+            ServiceSourceMapping mapping = ServiceSourceMapping.builder()
+                .serviceName(stored.serviceName())
+                .gitUrl(stored.gitUrl())
+                .localPath(stored.localPath())
+                .defaultBranch(stored.defaultBranch())
+                .sourceRoots(stored.sourceRoots())
+                .build();
+            gitWorkspaceService.syncAndEnhance(stored.projectId(), stored.serviceName(), mapping);
         }
 
         return ServiceCodeRegistryResponse.builder()

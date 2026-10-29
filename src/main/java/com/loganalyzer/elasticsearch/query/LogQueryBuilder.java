@@ -371,22 +371,36 @@ public class LogQueryBuilder {
             Void.class);
     }
 
-    public SearchResponse<Void> errorResolution(Instant from, Instant to, String projectId) throws IOException {
+    public SearchResponse<Void> errorTriageTrend(Instant from, Instant to, String projectId) throws IOException {
+        String histogramInterval = errorHistogramInterval(from, to);
+        String rangeFromIso = from.toString();
+        String rangeToIso = to.toString();
+        FieldDateMath boundsMin = FieldDateMath.of(fdm -> fdm.expr(rangeFromIso));
+        FieldDateMath boundsMax = FieldDateMath.of(fdm -> fdm.expr(rangeToIso));
         return client.search(s -> s
             .index(INDEX_PATTERN)
             .size(0)
             .query(q -> q.bool(b -> b
                 .filter(f -> f.term(t -> t.field("projectId.keyword").value(projectId)))
-                .filter(f -> f.term(t -> t.field("resolved").value(true)))
-                .filter(f -> f.exists(e -> e.field("resolved_at")))
+                .filter(f -> f.terms(t -> t.field("level.keyword")
+                    .terms(tv -> tv.value(List.of(
+                        FieldValue.of("ERROR"),
+                        FieldValue.of("FATAL"),
+                        FieldValue.of("CRITICAL"))))))
                 .filter(f -> f.range(r -> r.date(d -> d
-                    .field("resolved_at")
-                    .gte(from.toString())
-                    .lte(to.toString()))))))
-            .aggregations("by_resolved_hour", a -> a.dateHistogram(dh -> dh
-                .field("resolved_at")
-                .timeZone("+00:00")
-                .fixedInterval(fi -> fi.time("1h")))),
+                    .field("timestamp")
+                    .gte(rangeFromIso)
+                    .lte(rangeToIso))))))
+            .aggregations("over_time", a -> a
+                .dateHistogram(dh -> dh
+                    .field("timestamp")
+                    .timeZone("+00:00")
+                    .fixedInterval(fi -> fi.time(histogramInterval))
+                    .minDocCount(0)
+                    .extendedBounds(eb -> eb.min(boundsMin).max(boundsMax)))
+                .aggregations("open", aa -> aa.filter(f -> f.bool(b -> b
+                    .mustNot(mn -> mn.term(t -> t.field("resolved").value(true))))))
+                .aggregations("resolved", aa -> aa.filter(f -> f.term(t -> t.field("resolved").value(true))))),
             Void.class);
     }
 

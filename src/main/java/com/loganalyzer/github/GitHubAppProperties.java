@@ -10,6 +10,7 @@ public class GitHubAppProperties {
     private App app = new App();
     private Pr pr = new Pr();
     private Agent agent = new Agent();
+    private Workspace workspace = new Workspace();
 
     @Data
     public static class App {
@@ -40,6 +41,11 @@ public class GitHubAppProperties {
         private boolean enabled = true;
         private boolean autoCreateAfterAnalysis = false;
         private String branchPrefix = "logspectra/fix";
+        /**
+         * When true (default), one branch per service + error fingerprint — repeat Debug amends that
+         * branch and reuses an open PR instead of creating logspectra/fix-...-&lt;timestamp&gt; each time.
+         */
+        private boolean reuseBranchPerFingerprint = true;
         private String commitAuthorName = "LogSpectra";
         private String commitAuthorEmail = "logspectra@users.noreply.github.com";
         private String reviewers = "";
@@ -51,12 +57,29 @@ public class GitHubAppProperties {
      */
     @Data
     public static class Agent {
-        /** When true (and app.enabled), OpenAI analysis uses the tool loop when a gitUrl is registered. */
-        private boolean toolCallingEnabled = true;
+        /**
+         * When true (and app.enabled), analysis uses the expensive multi-turn GitHub tool loop.
+         * Default false — prefer stack-trace scoped files + search/replace patches.
+         */
+        private boolean toolCallingEnabled = false;
         private int maxIterations = 8;
         /** Cap recursive tree listing returned to the model. */
         private int maxTreeEntries = 400;
         /** Truncate file content returned by get_file_content. */
         private int maxFileChars = 60_000;
+    }
+
+    /**
+     * Materialized git checkouts at {@code {root}/{projectId}/{service}} for analyze + push remediation.
+     */
+    @Data
+    public static class Workspace {
+        /** When true (and app.enabled), clone/pull into workspace root and prefer disk for context + PR push. */
+        private boolean enabled = true;
+        /** e.g. /var/logspectra/code-registry or ~/logspectra/code-registry */
+        private String root = System.getProperty("user.home") + "/logspectra/code-registry";
+        private int cloneDepth = 1;
+        /** Command timeout per git invocation. */
+        private int commandTimeoutSeconds = 120;
     }
 }

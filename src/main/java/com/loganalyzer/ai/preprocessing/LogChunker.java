@@ -67,6 +67,7 @@ public class LogChunker {
     private LogDocument cloneLog(LogDocument log) {
         return LogDocument.builder()
             .id(log.getId())
+            .projectId(log.getProjectId())
             .timestamp(log.getTimestamp())
             .level(log.getLevel())
             .service(log.getService())

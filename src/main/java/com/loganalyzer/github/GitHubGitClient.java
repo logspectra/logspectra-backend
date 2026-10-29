@@ -201,6 +201,59 @@ public class GitHubGitClient {
         post("/repos/{owner}/{repo}/git/refs", body, repo.owner(), repo.repo());
     }
 
+    /** Tip commit SHA for {@code refs/heads/<branch>}, empty when the branch does not exist. */
+    public Optional<String> getBranchTipSha(GitHubRepoRef repo, String branch) {
+        if (!StringUtils.hasText(branch)) {
+            return Optional.empty();
+        }
+        try {
+            Map<String, Object> response = get(
+                "/repos/{owner}/{repo}/git/ref/heads/{branch}",
+                repo.owner(),
+                repo.repo(),
+                branch
+            );
+            Object object = response.get("object");
+            if (object instanceof Map<?, ?> ref && ref.get("sha") != null) {
+                return Optional.of(String.valueOf(ref.get("sha")));
+            }
+            return Optional.empty();
+        } catch (RestClientResponseException ex) {
+            if (ex.getStatusCode().value() == 404) {
+                return Optional.empty();
+            }
+            throw ex;
+        }
+    }
+
+    public void updateBranchRef(GitHubRepoRef repo, String branch, String commitSha) {
+        Map<String, Object> body = Map.of("sha", commitSha, "force", false);
+        client().patch()
+            .uri("/repos/{owner}/{repo}/git/refs/heads/{branch}", repo.owner(), repo.repo(), branch)
+            .contentType(MediaType.APPLICATION_JSON)
+            .body(body)
+            .retrieve()
+            .toBodilessEntity();
+    }
+
+    /** First open PR whose head is {@code owner:branch}, if any. */
+    public Optional<Map<String, Object>> findOpenPullRequest(GitHubRepoRef repo, String headBranch) {
+        String head = repo.owner() + ":" + headBranch;
+        List<Map<String, Object>> pulls = client().get()
+            .uri(uriBuilder -> uriBuilder
+                .path("/repos/{owner}/{repo}/pulls")
+                .queryParam("state", "open")
+                .queryParam("head", head)
+                .queryParam("per_page", "1")
+                .build(repo.owner(), repo.repo()))
+            .retrieve()
+            .body(new ParameterizedTypeReference<>() {});
+        if (pulls == null || pulls.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(pulls.getFirst());
+    }
+
     public Map<String, Object> createPullRequest(GitHubRepoRef repo, String title, String bodyMarkdown,
                                                  String head, String base) {
         Map<String, Object> body = new LinkedHashMap<>();

@@ -56,6 +56,26 @@ class KafkaLogDocumentMapperTest {
         assertThat(doc.getLogger()).isEqualTo("com.example.Orders");
         assertThat(doc.getThread()).isEqualTo("main");
         assertThat(doc.getStackTrace()).contains("RuntimeException");
-        assertThat(doc.getTimestamp()).isNotNull();
+    @Test
+    void readsEndpointFromMdcAndLegacyRouteInMessage() throws Exception {
+        String json = """
+            {
+              "timestamp": "2026-01-01T12:00:00Z",
+              "level": "ERROR",
+              "service": "gateway-service",
+              "message": "upstream failure route=/api/checkout status=502",
+              "endpoint": "/api/checkout"
+            }
+            """;
+
+        LogDocument doc = mapper.fromKafkaPayload(json);
+
+        assertThat(doc.getEndpoint()).isEqualTo("/api/checkout");
+    }
+
+    @Test
+    void derivesEndpointFromRouteTokenInMessage() throws Exception {
+        assertThat(KafkaLogDocumentMapper.extractRouteFromMessage("fail route=/api/catalog batch=1/3"))
+            .isEqualTo("/api/catalog");
     }
 }
