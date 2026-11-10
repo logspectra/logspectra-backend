@@ -16,13 +16,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Checkout logspectra-ai
-        uses: actions/checkout@v4
-        with:
-          repository: logspectra/logspectra-ai
-          path: logspectra-ai
-          ref: main
-
       - name: Docker Hub login
         uses: docker/login-action@v3
         with:
