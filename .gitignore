@@ -1,4 +1,6 @@
 .idea/
+# Present in CI / local Docker build context only
+logspectra-ai/
 target/
 out/
 build/
