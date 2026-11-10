@@ -1,11 +1,10 @@
-# Build context must include logspectra-ai/ (CI workflow checks it out next to this Dockerfile)
+# logspectra-ai resolves from JitPack (see pom.xml) — no sibling checkout in build context
 FROM maven:3.9.9-eclipse-temurin-21 AS build
 WORKDIR /app
 
-COPY logspectra-ai /tmp/logspectra-ai
-RUN mvn -B -ntp -f /tmp/logspectra-ai/pom.xml install -DskipTests
-
 COPY pom.xml .
+RUN mvn -B -ntp dependency:go-offline -DskipTests
+
 COPY src src
 RUN mvn -B -ntp -DskipTests package \
  && cp target/logspectra-backend-*.jar /app/app.jar
