@@ -56,6 +56,8 @@ class KafkaLogDocumentMapperTest {
         assertThat(doc.getLogger()).isEqualTo("com.example.Orders");
         assertThat(doc.getThread()).isEqualTo("main");
         assertThat(doc.getStackTrace()).contains("RuntimeException");
+    }
+
     @Test
     void readsEndpointFromMdcAndLegacyRouteInMessage() throws Exception {
         String json = """
