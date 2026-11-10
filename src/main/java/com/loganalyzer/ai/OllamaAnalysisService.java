@@ -1,7 +1,10 @@
 package com.loganalyzer.ai;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.loganalyzer.ai.agent.GitHubAgentBridge;
+import com.loganalyzer.ai.springai.SpringAiChatGateway;
 import com.loganalyzer.ai.preprocessing.LogChunker;
+import com.loganalyzer.elasticsearch.document.LogDocument;
 import com.loganalyzer.ai.preprocessing.LogSummarizer;
 import com.loganalyzer.ai.preprocessing.StackTraceNormalizer;
 import com.loganalyzer.ai.prompt.PromptBuilder;
@@ -10,6 +13,7 @@ import com.loganalyzer.infrastructure.ratelimit.AIRateLimiter;
 import com.loganalyzer.service.CacheService;
 import com.logspectra.ai.LogSpectraAiFacade;
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
@@ -22,6 +26,10 @@ public class OllamaAnalysisService extends AbstractChunkedAIAnalysisProvider {
 
     private static final String DEFAULT_BASE_URL = "http://localhost:11434";
     private static final String DEFAULT_MODEL = "llama3";
+    private final GitHubAgentBridge githubAgentBridge;
+    private final SpringAiChatGateway springAiChatGateway;
+    private final PromptBuilder promptBuilder;
+
     public OllamaAnalysisService(PromptBuilder promptBuilder,
                                  LogChunker chunker,
                                  LogSummarizer summarizer,
@@ -29,10 +37,16 @@ public class OllamaAnalysisService extends AbstractChunkedAIAnalysisProvider {
                                  CacheService cacheService,
                                  AIRateLimiter rateLimiter,
                                  AnalysisResultParser responseParser,
+                                 AnalysisConfidenceScorer confidenceScorer,
                                  LogSpectraAiFacade logSpectraAiFacade,
-                                 AiLogEventMapper aiLogEventMapper) {
+                                 AiLogEventMapper aiLogEventMapper,
+                                 GitHubAgentBridge githubAgentBridge,
+                                 SpringAiChatGateway springAiChatGateway) {
         super(promptBuilder, chunker, summarizer, stackTraceNormalizer, cacheService, rateLimiter, responseParser,
-            logSpectraAiFacade, aiLogEventMapper);
+            confidenceScorer, logSpectraAiFacade, aiLogEventMapper);
+        this.promptBuilder = promptBuilder;
+        this.githubAgentBridge = githubAgentBridge;
+        this.springAiChatGateway = springAiChatGateway;
     }
 
     @Override
@@ -52,6 +66,12 @@ public class OllamaAnalysisService extends AbstractChunkedAIAnalysisProvider {
 
     @Override
     protected String callProvider(String model, String userPrompt, AIAnalysisRequest request) {
+        return springAiChatGateway
+            .tryComplete(provider(), model, promptBuilder.getSystemPrompt(), userPrompt, request, AIStreamListener.NO_OP)
+            .orElseGet(() -> callProviderViaRest(model, userPrompt, request));
+    }
+
+    private String callProviderViaRest(String model, String userPrompt, AIAnalysisRequest request) {
         String runtimeModel = StringUtils.hasText(request.resolvedModel()) ? request.resolvedModel() : model;
         String runtimeBaseUrl = StringUtils.hasText(request.resolvedBaseUrl()) ? request.resolvedBaseUrl() : DEFAULT_BASE_URL;
         String runtimeApiKey = request.resolvedApiKey();
@@ -90,11 +110,30 @@ public class OllamaAnalysisService extends AbstractChunkedAIAnalysisProvider {
     protected String callProvider(String model,
                                   String userPrompt,
                                   AIAnalysisRequest request,
-                                  AIStreamListener streamListener) {
-        if (streamListener == null || !streamListener.isEnabled()) {
-            return callProvider(model, userPrompt, request);
-        }
+                                  AIStreamListener streamListener,
+                                  List<LogDocument> logs) {
+        return githubAgentBridge
+            .tryRun(AIProvider.OLLAMA, model, userPrompt, request, logs, streamListener, DEFAULT_BASE_URL)
+            .orElseGet(() -> callProvider(model, userPrompt, request, streamListener));
+    }
 
+    @Override
+    protected String callProvider(String model,
+                                  String userPrompt,
+                                  AIAnalysisRequest request,
+                                  AIStreamListener streamListener) {
+        if (streamListener != null && streamListener.isEnabled()) {
+            return springAiChatGateway
+                .tryComplete(provider(), model, promptBuilder.getSystemPrompt(), userPrompt, request, streamListener)
+                .orElseGet(() -> callProviderViaRestStream(model, userPrompt, request, streamListener));
+        }
+        return callProvider(model, userPrompt, request);
+    }
+
+    private String callProviderViaRestStream(String model,
+                                             String userPrompt,
+                                             AIAnalysisRequest request,
+                                             AIStreamListener streamListener) {
         String runtimeModel = StringUtils.hasText(request.resolvedModel()) ? request.resolvedModel() : model;
         String runtimeBaseUrl = StringUtils.hasText(request.resolvedBaseUrl()) ? request.resolvedBaseUrl() : DEFAULT_BASE_URL;
         String runtimeApiKey = request.resolvedApiKey();

@@ -37,4 +37,26 @@ public class AgentToolRegistry {
             ))
             .toList();
     }
+
+    /** Gemini {@code tools[].functionDeclarations}. */
+    public List<Map<String, Object>> geminiFunctionDeclarations() {
+        return byName.values().stream()
+            .map(tool -> Map.<String, Object>of(
+                "name", tool.name(),
+                "description", tool.description(),
+                "parameters", tool.parametersSchema()
+            ))
+            .toList();
+    }
+
+    /** Anthropic {@code tools[]} entries. */
+    public List<Map<String, Object>> claudeToolDefinitions() {
+        return byName.values().stream()
+            .map(tool -> Map.<String, Object>of(
+                "name", tool.name(),
+                "description", tool.description(),
+                "input_schema", tool.parametersSchema()
+            ))
+            .toList();
+    }
 }

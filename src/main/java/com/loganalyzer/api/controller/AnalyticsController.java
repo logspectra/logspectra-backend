@@ -1,7 +1,7 @@
 package com.loganalyzer.api.controller;
 
 import com.loganalyzer.api.dto.response.AiUsageResponse;
-import com.loganalyzer.api.dto.response.ErrorResolutionResponse;
+import com.loganalyzer.api.dto.response.ErrorTriageResponse;
 import com.loganalyzer.api.dto.response.IngestionRateResponse;
 import com.loganalyzer.api.dto.response.SeverityMixResponse;
 import com.loganalyzer.api.dto.response.TopEndpointResponse;
@@ -98,8 +98,8 @@ public class AnalyticsController {
         return ResponseEntity.ok(analyticsTrendService.getSeverityMix(projectId, from, to));
     }
 
-    @GetMapping("/error-resolution")
-    public ResponseEntity<ErrorResolutionResponse> errorResolution(
+    @GetMapping("/error-triage")
+    public ResponseEntity<ErrorTriageResponse> errorTriage(
         @RequestParam(value = "from", required = false)
         @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant from,
         @RequestParam(value = "to", required = false)
@@ -112,7 +112,7 @@ public class AnalyticsController {
         UUID userId = projectAccessService.resolveUserId(principal, userIdHeader);
         UUID projectId = projectAccessService.resolveProjectId(userId, projectIdHeader, projectIdParam);
         projectAccessService.validateAccess(userId, projectId);
-        return ResponseEntity.ok(analyticsTrendService.getErrorResolution(projectId, from, to));
+        return ResponseEntity.ok(analyticsTrendService.getErrorTriage(projectId, from, to));
     }
 
     @GetMapping("/top-endpoints")

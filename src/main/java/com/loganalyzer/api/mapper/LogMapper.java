@@ -29,6 +29,7 @@ public class LogMapper {
             .thread(document.getThread())
             .logger(document.getLogger())
             .message(document.getMessage())
+            .endpoint(document.getEndpoint())
             .exception(document.getException())
             .stackTrace(document.getStackTrace())
             .host(document.getHost())
@@ -90,6 +91,8 @@ public class LogMapper {
                 .priority(fix.getPriority())
                 .effort(fix.getEffort())
                 .filePath(fix.getFilePath())
+                .search(fix.getSearch())
+                .replace(fix.getReplace())
                 .newContent(fix.getNewContent())
                 .build())
             .toList();

@@ -135,20 +135,15 @@ Run a single test class:
 mvn -Dtest=LogAnalysisServiceTest test
 ```
 
-## Docker Image
+## Docker / Docker Hub
 
-Build image:
+Images: `logspectra/logspectra-backend` on [Docker Hub](https://hub.docker.com/r/logspectra/logspectra-backend).
 
-```powershell
-docker build -t logspectra/logspectra-backend:latest .
-```
+### Publish (maintainers)
 
-Push tags:
+Same Docker Hub repo: [logspectra/logspectra-backend](https://hub.docker.com/r/logspectra/logspectra-backend)
 
-```powershell
-docker push logspectra/logspectra-backend:latest
-docker push logspectra/logspectra-backend:1.0.0
-```
+Publishing is **CI-only**: `.github/workflows/docker-publish.yml` on **`main`** pushes `latest` + commit sha. Docker Hub creds in the **`logspectra` GitHub environment** (or repo secrets): `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`. The workflow checks out `logspectra-ai` into the Docker build context automatically.
 
 ## Troubleshooting
 

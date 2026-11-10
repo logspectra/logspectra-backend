@@ -34,16 +34,22 @@ public class PromptBuilder {
                   "fix": "description of the change",
                   "priority": "HIGH",
                   "effort": "LOW",
-                  "filePath": "src/main/java/.../ClassName.java (when you can identify the file)",
-                  "newContent": "FULL updated file source when proposing a concrete patch; omit if uncertain"
+                  "filePath": "src/main/java/.../ClassName.java",
+                  "search": "exact existing code block to find (preferred — keep small, unique)",
+                  "replace": "replacement for that search block only",
+                  "newContent": "FULL file only if search/replace is impossible; otherwise omit"
                 }
               ],
               "relatedTraceIds": ["traceId1"],
-              "confidence": 0.0
+              "confidence": 0.72
             }
 
-            When code snippets are provided above, prefer returning filePath + newContent for at least
-            one high-confidence fix so a remediation PR can commit the change without a local clone.
+            Set "confidence" to a number between 0.0 and 1.0 (not 0–100): your subjective certainty that the
+            root cause and fixes match the logs (e.g. 0.85 = strong stack-trace match, 0.45 = plausible but sparse logs).
+
+            When codebase context is provided: for at least one high-confidence fix return
+            filePath + search + replace (exact text from the provided source, without line-number prefixes).
+            Prefer search/replace over newContent to minimize output tokens and avoid truncating large files.
             """,
             context,
             logs.isEmpty() ? "N/A" : logs.get(0).getTimestamp(),

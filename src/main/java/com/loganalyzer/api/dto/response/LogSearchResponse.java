@@ -17,6 +17,7 @@ public class LogSearchResponse {
     private String thread;
     private String logger;
     private String message;
+    private String endpoint;
     private String exception;
     private String stackTrace;
     private String host;

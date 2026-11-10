@@ -29,6 +29,7 @@ public abstract class AbstractChunkedAIAnalysisProvider implements AIAnalysisPro
     private final CacheService cacheService;
     private final AIRateLimiter rateLimiter;
     private final AnalysisResultParser responseParser;
+    private final AnalysisConfidenceScorer confidenceScorer;
     private final LogSpectraAiFacade logSpectraAiFacade;
     private final AiLogEventMapper aiLogEventMapper;
 
@@ -39,6 +40,7 @@ public abstract class AbstractChunkedAIAnalysisProvider implements AIAnalysisPro
                                                 CacheService cacheService,
                                                 AIRateLimiter rateLimiter,
                                                 AnalysisResultParser responseParser,
+                                                AnalysisConfidenceScorer confidenceScorer,
                                                 LogSpectraAiFacade logSpectraAiFacade,
                                                 AiLogEventMapper aiLogEventMapper) {
         this.promptBuilder = promptBuilder;
@@ -48,6 +50,7 @@ public abstract class AbstractChunkedAIAnalysisProvider implements AIAnalysisPro
         this.cacheService = cacheService;
         this.rateLimiter = rateLimiter;
         this.responseParser = responseParser;
+        this.confidenceScorer = confidenceScorer;
         this.logSpectraAiFacade = logSpectraAiFacade;
         this.aiLogEventMapper = aiLogEventMapper;
     }
@@ -59,17 +62,18 @@ public abstract class AbstractChunkedAIAnalysisProvider implements AIAnalysisPro
 
     @Override
     public AnalysisResult analyze(List<LogDocument> logs, AIAnalysisRequest request, AIStreamListener streamListener) {
+        List<LogDocument> normalized = logs.stream().map(this::normalize).toList();
+        List<LogDocument> deduped = chunker.deduplicate(normalized);
         String fingerprint = computeFingerprint(logs);
         Optional<AnalysisResult> cached = cacheService.getAnalysis(DEFAULT_PROJECT_ID, provider() + ":" + fingerprint);
         if (cached.isPresent()) {
             AnalysisResult result = cached.get();
             result.setCachedResult(true);
+            confidenceScorer.apply(deduped, result);
             return result;
         }
 
         rateLimiter.acquire(provider().name().toLowerCase() + "-analysis");
-        List<LogDocument> normalized = logs.stream().map(this::normalize).toList();
-        List<LogDocument> deduped = chunker.deduplicate(normalized);
         List<List<LogDocument>> chunks = chunker.chunk(deduped);
         try {
             String basePrompt = chunks.size() == 1
@@ -78,6 +82,7 @@ public abstract class AbstractChunkedAIAnalysisProvider implements AIAnalysisPro
             String prompt = enrichWithCodeContext(basePrompt, deduped);
             String response = callProvider(getAnalysisModel(), prompt, request, streamListener, deduped);
             AnalysisResult result = responseParser.parse(response);
+            confidenceScorer.apply(deduped, result);
             result.setFingerprint(fingerprint);
             result.setAnalyzedAt(Instant.now());
             String cacheKey = provider() + ":" + fingerprint;

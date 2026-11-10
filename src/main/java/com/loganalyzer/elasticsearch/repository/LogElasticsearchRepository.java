@@ -84,8 +84,8 @@ public class LogElasticsearchRepository {
         return logQueryBuilder.topEndpoints(from, to, projectId, limit);
     }
 
-    public SearchResponse<Void> errorResolution(Instant from, Instant to, String projectId) throws IOException {
-        return logQueryBuilder.errorResolution(from, to, projectId);
+    public SearchResponse<Void> errorTriageTrend(Instant from, Instant to, String projectId) throws IOException {
+        return logQueryBuilder.errorTriageTrend(from, to, projectId);
     }
 
     public long resolveLogs(List<String> logIds) throws IOException {
