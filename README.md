@@ -143,7 +143,7 @@ Images: `logspectra/logspectra-backend` on [Docker Hub](https://hub.docker.com/r
 
 Same Docker Hub repo: [logspectra/logspectra-backend](https://hub.docker.com/r/logspectra/logspectra-backend)
 
-Publishing is **CI-only**: `.github/workflows/docker-publish.yml` on **`main`** pushes `latest` + commit sha. Docker Hub creds in the **`logspectra` GitHub environment** (or repo secrets): `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`. The Docker image build resolves **`logspectra-ai`** from **JitPack** (same as local `mvn package`).
+Publishing is **CI-only**: `.github/workflows/docker-publish.yml` on **`main`** pushes `latest` + commit sha for **linux/amd64 and linux/arm64** (Finch / Apple Silicon). Docker Hub creds in the **`logspectra` GitHub environment** (or repo secrets): `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`. The Docker image build resolves **`logspectra-ai`** from **JitPack** (same as local `mvn package`).
 
 ## Troubleshooting
 
